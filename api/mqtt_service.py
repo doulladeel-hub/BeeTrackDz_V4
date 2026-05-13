@@ -16,9 +16,9 @@ from typing import Optional
 import certifi
 import paho.mqtt.client as mqtt
 
-from test.BeeTrackDz.api.models import SensorDataIn
-from test.BeeTrackDz.api.db import write_sensor_data
-from test.BeeTrackDz.api.config import (
+from api.models import SensorDataIn
+from api.db import write_sensor_data
+from api.config import (
     MQTT_BROKER, MQTT_PORT, MQTT_USERNAME, MQTT_PASSWORD,
     MQTT_TOPIC, MQTT_TLS_ENABLED,
 )

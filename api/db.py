@@ -20,9 +20,9 @@ from typing import Optional, List
 from sqlalchemy import create_engine, text, func
 from sqlalchemy.orm import sessionmaker, scoped_session
 
-from test.BeeTrackDz.api.config import DB_PATH
-from test.BeeTrackDz.api.db_models import Base, SensorDataRow
-from test.BeeTrackDz.api.models import SensorDataIn
+from api.config import DB_PATH
+from api.db_models import Base, SensorDataRow
+from api.models import SensorDataIn
 
 logger = logging.getLogger(__name__)
 

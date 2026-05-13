@@ -36,23 +36,23 @@ from pydantic import BaseModel
 from sqlalchemy import text as sa_text
 from sqlalchemy.orm import Session as OrmSession
 
-from test.BeeTrackDz.api.config import (
+from api.config import (
     CORS_ORIGINS, IOT_API_KEY, LOG_LEVEL,
     SECRET_SALT, SERVER_HOST, SERVER_PORT, TOKEN_TTL_HOURS,
     TELEGRAM_BOT_TOKEN, TWILIO_FROM, TWILIO_SID, TWILIO_TOKEN,
     SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_USER,
     _warn_defaults,
 )
-from test.BeeTrackDz.api.db import (
+from api.db import (
     Session as DBSession,          # scoped-session factory
     _engine,                       # SQLAlchemy engine (for raw-SQL fallback)
     check_db_health, get_all_latest_data, get_history_data,
     get_latest_data, init_database, write_sensor_data,
 )
-from test.BeeTrackDz.api.db_models import (
+from api.db_models import (
     Base, NotificationSettingRow, SensorDataRow, SessionRow, UserRow,
 )
-from test.BeeTrackDz.api.models import SensorDataIn
+from api.models import SensorDataIn
 
 import os as _os
 
@@ -479,7 +479,7 @@ async def lifespan(app: FastAPI):
 
         if not IS_SERVERLESS:
             try:
-                from test.BeeTrackDz.api.mqtt_service import start_mqtt_client
+                from api.mqtt_service import start_mqtt_client
                 start_mqtt_client()
                 logger.info("MQTT client started.")
             except Exception as exc:
@@ -500,7 +500,7 @@ async def lifespan(app: FastAPI):
             broadcaster_task.cancel()
         if not IS_SERVERLESS:
             try:
-                from test.BeeTrackDz.api.mqtt_service import stop_mqtt_client
+                from api.mqtt_service import stop_mqtt_client
                 stop_mqtt_client()
             except Exception:
                 pass
@@ -961,7 +961,7 @@ def delete_user(target_username: str, admin: str = Depends(require_admin)):
 def health():
     db_ok = check_db_health()
     try:
-        from test.BeeTrackDz.api.mqtt_service import get_mqtt_status
+        from api.mqtt_service import get_mqtt_status
         mqtt_status = get_mqtt_status()
     except ImportError:
         mqtt_status = "not_configured"
