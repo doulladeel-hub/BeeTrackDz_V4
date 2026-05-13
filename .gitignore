@@ -1,0 +1,6 @@
+.vercel
+*.db
+*env
+*__pycache__
+README.md
+raspberry_simulator.py

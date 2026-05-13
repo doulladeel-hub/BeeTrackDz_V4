@@ -1,0 +1,2770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Smart Apiary — IoT Dashboard</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐝</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════ */
+:root {
+  --bg:        #0a0b0d;
+  --bg2:       #111318;
+  --bg3:       #181c24;
+  --bg4:       #1f2433;
+  --border:    #252b3a;
+  --border2:   #2e3648;
+  --text:      #e8ecf4;
+  --muted:     #6b7a99;
+  --muted2:    #4a5568;
+  --amber:     #f59e0b;
+  --amber2:    #fbbf24;
+  --honey:     #fb923c;
+  --green:     #10b981;
+  --green2:    #34d399;
+  --red:       #ef4444;
+  --red2:      #f87171;
+  --blue:      #3b82f6;
+  --blue2:     #60a5fa;
+  --purple:    #8b5cf6;
+  --purple2:   #a78bfa;
+  --teal:      #14b8a6;
+  --yellow:    #eab308;
+  --sidebar-w: 240px;
+  --hdr-h:     60px;
+  --radius:    12px;
+  --radius-sm: 8px;
+  --shadow:    0 4px 24px rgba(0,0,0,0.4);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,0.6);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius:4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--amber); }
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+/* ═══════════════════════════════════════════════════
+   AUTH SCREENS
+═══════════════════════════════════════════════════ */
+#authScreen {
+  position:fixed; inset:0; z-index:9999;
+  background: var(--bg);
+  display:flex; align-items:center; justify-content:center;
+  transition: opacity .5s ease, transform .5s ease;
+}
+#authScreen.hide { opacity:0; pointer-events:none; transform:scale(1.04); }
+
+.auth-card {
+  width:440px; max-width:95vw;
+  background: var(--bg2);
+  border:1px solid var(--border2);
+  border-radius:20px;
+  padding:40px 36px;
+  box-shadow: var(--shadow-lg);
+  position:relative; overflow:hidden;
+}
+.auth-card::before {
+  content:'';
+  position:absolute; top:-80px; right:-80px;
+  width:220px; height:220px;
+  background:radial-gradient(circle,rgba(245,158,11,.12) 0%,transparent 70%);
+  border-radius:50%; pointer-events:none;
+}
+
+.auth-logo { text-align:center; margin-bottom:24px; }
+.auth-logo .bee { font-size:2.8rem; display:block; }
+.auth-logo h1 { font-size:1.6rem; font-weight:800; color:var(--text); margin-top:6px; }
+.auth-logo p { font-size:.8rem; color:var(--muted); margin-top:2px; }
+
+.auth-tabs {
+  display:flex; background:var(--bg3); border-radius:10px;
+  padding:4px; gap:4px; margin-bottom:28px;
+}
+.auth-tab {
+  flex:1; padding:9px; text-align:center; cursor:pointer;
+  border-radius:8px; font-size:.85rem; font-weight:600;
+  color:var(--muted); border:none; background:none;
+  transition:all .2s;
+}
+.auth-tab.active { background:var(--amber); color:#0a0b0d; }
+
+.auth-page { display:none; }
+.auth-page.active { display:block; }
+
+.field { margin-bottom:18px; }
+.field label {
+  display:block; font-size:.72rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.08em;
+  color:var(--muted); margin-bottom:7px;
+}
+.field-wrap { position:relative; }
+.field-wrap i.prefix {
+  position:absolute; left:13px; top:50%; transform:translateY(-50%);
+  color:var(--muted); font-size:.85rem; transition:color .2s; pointer-events:none;
+}
+.field-wrap input {
+  width:100%; background:var(--bg3); border:1.5px solid var(--border2);
+  border-radius:10px; color:var(--text);
+  font-family:'Inter',sans-serif; font-size:.9rem;
+  padding:11px 12px 11px 38px; outline:none;
+  transition:border-color .2s, box-shadow .2s;
+}
+.field-wrap input:focus { border-color:var(--amber); box-shadow:0 0 0 3px rgba(245,158,11,.15); }
+.field-wrap input:focus ~ i.prefix { color:var(--amber); }
+.eye-btn {
+  position:absolute; right:12px; top:50%; transform:translateY(-50%);
+  background:none; border:none; cursor:pointer; color:var(--muted); font-size:.8rem;
+  transition:color .2s;
+}
+.eye-btn:hover { color:var(--amber); }
+
+.auth-err {
+  background:rgba(239,68,68,.1); border:1px solid rgba(239,68,68,.3);
+  color:var(--red2); border-radius:9px; padding:10px 13px;
+  font-size:.82rem; margin-bottom:16px; display:none; align-items:center; gap:8px;
+}
+.auth-err.show { display:flex; animation:shake .4s ease; }
+
+.auth-ok {
+  background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.3);
+  color:var(--green2); border-radius:9px; padding:10px 13px;
+  font-size:.82rem; margin-bottom:16px; display:none; align-items:center; gap:8px;
+}
+.auth-ok.show { display:flex; }
+
+.btn-primary {
+  width:100%; padding:13px; border:none; border-radius:11px;
+  background:linear-gradient(135deg,var(--amber),var(--honey));
+  font-family:'Inter',sans-serif; font-size:.95rem; font-weight:700;
+  color:#0a0b0d; cursor:pointer;
+  transition:transform .2s, box-shadow .2s, opacity .2s;
+  position:relative; overflow:hidden;
+}
+.btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(245,158,11,.35); }
+.btn-primary:active { transform:translateY(0); }
+.btn-primary:disabled { opacity:.55; cursor:not-allowed; transform:none; }
+.btn-primary .spinner {
+  display:none; width:17px; height:17px;
+  border:2px solid rgba(0,0,0,.2); border-top-color:#0a0b0d;
+  border-radius:50%; animation:spin .7s linear infinite; margin:0 auto;
+}
+.btn-primary.loading .btn-txt { display:none; }
+.btn-primary.loading .spinner { display:block; }
+
+/* ═══════════════════════════════════════════════════
+   APP LAYOUT
+═══════════════════════════════════════════════════ */
+#app { display:none; height:100vh; overflow:hidden; }
+#app.show { display:flex; }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  width:var(--sidebar-w); flex-shrink:0;
+  background:var(--bg2); border-right:1px solid var(--border);
+  display:flex; flex-direction:column;
+  height:100vh; overflow:hidden;
+  position:relative; z-index:50;
+  transition: transform .3s ease;
+}
+
+.sidebar-logo {
+  height:var(--hdr-h); padding:0 20px;
+  display:flex; align-items:center; gap:10px;
+  border-bottom:1px solid var(--border); flex-shrink:0;
+}
+.sidebar-logo .logo-icon {
+  width:36px; height:36px; border-radius:10px;
+  background:linear-gradient(135deg,var(--amber),var(--honey));
+  display:flex; align-items:center; justify-content:center; font-size:1.1rem;
+}
+.sidebar-logo h2 { font-size:.95rem; font-weight:800; color:var(--text); }
+.sidebar-logo p { font-size:.65rem; color:var(--muted); }
+
+.sidebar-nav { flex:1; padding:12px 10px; overflow-y:auto; }
+.nav-section { margin-bottom:20px; }
+.nav-section-label {
+  font-size:.65rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.1em; color:var(--muted2); padding:0 10px; margin-bottom:6px;
+}
+.nav-item {
+  display:flex; align-items:center; gap:11px;
+  padding:10px 12px; border-radius:9px; cursor:pointer;
+  font-size:.85rem; font-weight:500; color:var(--muted);
+  transition:all .18s; position:relative; user-select:none;
+}
+.nav-item:hover { background:var(--bg3); color:var(--text); }
+.nav-item.active { background:rgba(245,158,11,.12); color:var(--amber); }
+.nav-item.active::before {
+  content:''; position:absolute; left:0; top:20%; bottom:20%;
+  width:3px; border-radius:2px; background:var(--amber);
+}
+.nav-item i { width:18px; text-align:center; font-size:.9rem; }
+.nav-badge {
+  margin-left:auto; background:var(--red); color:#fff;
+  border-radius:999px; font-size:.65rem; font-weight:700;
+  padding:2px 7px; min-width:20px; text-align:center;
+}
+
+.sidebar-footer { padding:14px 16px; border-top:1px solid var(--border); flex-shrink:0; }
+.user-card {
+  display:flex; align-items:center; gap:10px;
+  padding:10px; border-radius:10px; background:var(--bg3);
+  cursor:pointer; transition:background .2s;
+}
+.user-card:hover { background:var(--bg4); }
+.user-avatar {
+  width:34px; height:34px; border-radius:50%;
+  background:linear-gradient(135deg,var(--amber),var(--honey));
+  display:flex; align-items:center; justify-content:center;
+  font-size:.85rem; font-weight:800; color:#0a0b0d; flex-shrink:0;
+}
+.user-info { flex:1; min-width:0; }
+.user-name { font-size:.82rem; font-weight:600; color:var(--text); }
+.user-role {
+  font-size:.68rem; color:var(--muted);
+  background:rgba(245,158,11,.15); border-radius:4px;
+  padding:1px 6px; display:inline-block; margin-top:2px;
+}
+.user-role.admin { background:rgba(139,92,246,.15); color:var(--purple2); }
+
+/* ── MAIN AREA ── */
+.main-area { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+
+/* ── TOP BAR ── */
+.topbar {
+  height:var(--hdr-h); background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  display:flex; align-items:center; padding:0 24px; gap:12px;
+  flex-shrink:0; z-index:40;
+}
+.topbar-left { flex:1; display:flex; align-items:center; gap:12px; }
+.page-title { font-size:1rem; font-weight:700; color:var(--text); }
+.page-sub { font-size:.75rem; color:var(--muted); }
+.topbar-right { display:flex; align-items:center; gap:8px; }
+
+.status-chip {
+  display:flex; align-items:center; gap:6px;
+  background:var(--bg3); border:1px solid var(--border);
+  border-radius:999px; padding:5px 12px; font-size:.72rem; color:var(--muted);
+}
+.dot { width:7px; height:7px; border-radius:50%; background:var(--muted); }
+.dot.ok  { background:var(--green); box-shadow:0 0 6px rgba(16,185,129,.6); }
+.dot.warn{ background:var(--yellow); box-shadow:0 0 6px rgba(234,179,8,.6); }
+.dot.err { background:var(--red); box-shadow:0 0 6px rgba(239,68,68,.6); }
+.dot.connecting { background:var(--blue); animation:pulse-dot 1.2s ease-in-out infinite; }
+
+@keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+.ws-status {
+  font-size:.72rem; padding:5px 12px;
+  border-radius:999px; border:1px solid;
+  font-weight:600; display:flex; align-items:center; gap:6px;
+}
+.ws-status.connected   { background:rgba(16,185,129,.1); border-color:rgba(16,185,129,.3); color:var(--green2); }
+.ws-status.disconnected{ background:rgba(239,68,68,.1); border-color:rgba(239,68,68,.3); color:var(--red2); }
+.ws-status.reconnecting{ background:rgba(59,130,246,.1); border-color:rgba(59,130,246,.3); color:var(--blue2); }
+
+.clock-chip {
+  font-family:'JetBrains Mono',monospace; font-size:.75rem;
+  color:var(--amber); background:var(--bg3); border:1px solid var(--border);
+  border-radius:999px; padding:5px 14px;
+}
+
+.icon-btn {
+  width:34px; height:34px; border-radius:9px;
+  background:var(--bg3); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; color:var(--muted); font-size:.85rem;
+  transition:all .2s;
+}
+.icon-btn:hover { border-color:var(--amber); color:var(--amber); }
+
+/* ── CONTENT AREA ── */
+.content { flex:1; overflow-y:auto; padding:24px; }
+
+/* ── SECTIONS ── */
+.section { display:none; }
+.section.active { display:block; }
+
+/* ── SECTION HEADER ── */
+.sec-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:20px;
+}
+.sec-hdr h2 { font-size:1.1rem; font-weight:700; }
+.sec-hdr-right { display:flex; gap:8px; align-items:center; }
+
+.last-updated { font-size:.72rem; color:var(--muted); display:flex; align-items:center; gap:5px; }
+
+/* ═══════════════════════════════════════════════════
+   CARDS
+═══════════════════════════════════════════════════ */
+.card {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:var(--radius); padding:20px;
+  transition:border-color .2s, box-shadow .2s;
+}
+.card:hover { border-color:var(--border2); box-shadow:var(--shadow); }
+
+/* ── METRIC CARDS ── */
+.metrics-grid {
+  display:grid; grid-template-columns:repeat(5,1fr);
+  gap:14px; margin-bottom:24px;
+}
+@media(max-width:1200px){ .metrics-grid{ grid-template-columns:repeat(3,1fr); } }
+@media(max-width:768px) { .metrics-grid{ grid-template-columns:repeat(2,1fr); } }
+@media(max-width:480px) { .metrics-grid{ grid-template-columns:1fr; } }
+
+.metric-card {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:var(--radius); padding:18px 18px 14px;
+  position:relative; overflow:hidden;
+  transition:transform .2s, border-color .2s, box-shadow .2s;
+  cursor:default;
+}
+.metric-card:hover { transform:translateY(-3px); box-shadow:var(--shadow); }
+.metric-card .top-bar {
+  position:absolute; top:0; left:0; right:0; height:3px; border-radius:var(--radius) var(--radius) 0 0;
+}
+.metric-card .card-hdr { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:12px; }
+.metric-card .icon-wrap {
+  width:38px; height:38px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center; font-size:1rem;
+}
+.metric-card .trend {
+  display:flex; align-items:center; gap:4px;
+  font-size:.72rem; font-weight:700; padding:3px 8px;
+  border-radius:999px;
+}
+.trend.up   { background:rgba(16,185,129,.15); color:var(--green2); }
+.trend.down { background:rgba(239,68,68,.15);  color:var(--red2);   }
+.trend.flat { background:rgba(107,122,153,.15); color:var(--muted);  }
+
+.metric-card .label { font-size:.72rem; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
+.metric-card .value { font-size:1.9rem; font-weight:800; color:var(--text); line-height:1; margin:4px 0 6px; }
+.metric-card .unit  { font-size:.9rem; font-weight:500; color:var(--muted); margin-left:2px; }
+.metric-card .status-row { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
+.status-badge {
+  font-size:.65rem; font-weight:700; padding:2px 8px;
+  border-radius:999px; border:1px solid;
+}
+.status-badge.normal   { background:rgba(16,185,129,.1); border-color:rgba(16,185,129,.3); color:var(--green2); }
+.status-badge.warning  { background:rgba(234,179,8,.1);  border-color:rgba(234,179,8,.3); color:var(--yellow); }
+.status-badge.critical { background:rgba(239,68,68,.1);  border-color:rgba(239,68,68,.3); color:var(--red2);   animation:pulse-badge 1s ease-in-out infinite; }
+@keyframes pulse-badge { 0%,100%{opacity:1;} 50%{opacity:.6;} }
+
+.sparkline-wrap { height:44px; margin:0 -4px; }
+
+/* ── PROGRESS BAR ── */
+.progress-bar { height:4px; background:var(--bg4); border-radius:4px; overflow:hidden; margin-top:8px; }
+.progress-fill { height:100%; border-radius:4px; transition:width .6s cubic-bezier(.4,0,.2,1); }
+
+/* ═══════════════════════════════════════════════════
+   HIVE SELECTOR
+═══════════════════════════════════════════════════ */
+.hive-bar {
+  display:flex; gap:10px; overflow-x:auto; padding-bottom:4px;
+  scrollbar-width:none; margin-bottom:22px;
+}
+.hive-bar::-webkit-scrollbar { display:none; }
+.hive-chip {
+  flex-shrink:0; padding:8px 18px; border-radius:999px; cursor:pointer;
+  font-size:.8rem; font-weight:600;
+  background:var(--bg2); border:1.5px solid var(--border2);
+  color:var(--muted); transition:all .2s;
+  display:flex; align-items:center; gap:7px;
+}
+.hive-chip:hover { border-color:var(--amber); color:var(--text); }
+.hive-chip.active { background:var(--amber); border-color:var(--amber); color:#0a0b0d; }
+.hive-chip .hive-dot { width:7px; height:7px; border-radius:50%; }
+
+/* ═══════════════════════════════════════════════════
+   CHARTS
+═══════════════════════════════════════════════════ */
+.charts-grid {
+  display:grid; grid-template-columns:repeat(2,1fr);
+  gap:16px; margin-bottom:24px;
+}
+@media(max-width:900px) { .charts-grid { grid-template-columns:1fr; } }
+
+.chart-card {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:var(--radius);
+  transition:box-shadow .2s;
+}
+.chart-card:hover { box-shadow:var(--shadow); }
+.chart-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 18px 12px;
+}
+.chart-title { display:flex; align-items:center; gap:9px; font-size:.88rem; font-weight:700; }
+.chart-icon { width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:.78rem; }
+.chart-actions { display:flex; align-items:center; gap:6px; }
+.chart-body { padding:0 14px 14px; }
+.chart-body canvas { display:block; }
+
+.time-tabs { display:flex; background:var(--bg4); border-radius:7px; padding:3px; gap:2px; }
+.time-tab {
+  padding:4px 10px; border-radius:5px; font-size:.7rem; font-weight:600;
+  color:var(--muted); background:none; border:none; cursor:pointer;
+  transition:all .15s;
+}
+.time-tab.active { background:var(--amber); color:#0a0b0d; }
+
+.zoom-btn, .reset-btn {
+  width:28px; height:28px; border-radius:7px;
+  background:var(--bg3); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; color:var(--muted); font-size:.72rem;
+  transition:all .2s;
+}
+.zoom-btn:hover, .reset-btn:hover { border-color:var(--amber); color:var(--amber); }
+
+/* ── FULL SCREEN CHART MODAL ── */
+#chartModal {
+  display:none; position:fixed; inset:0; z-index:8000;
+  background:rgba(0,0,0,.92); backdrop-filter:blur(6px);
+  align-items:center; justify-content:center;
+}
+#chartModal.show { display:flex; }
+.modal-inner {
+  width:96vw; height:92vh;
+  background:var(--bg2); border:1px solid var(--border2);
+  border-radius:16px; padding:24px;
+  display:flex; flex-direction:column; position:relative;
+}
+.modal-inner canvas { flex:1; min-height:0; }
+.modal-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:16px;
+}
+.modal-title { font-size:1.1rem; font-weight:700; }
+.modal-close {
+  width:34px; height:34px; border-radius:9px;
+  background:var(--bg3); border:1px solid var(--border);
+  cursor:pointer; color:var(--muted); font-size:1rem;
+  display:flex; align-items:center; justify-content:center;
+  transition:all .2s;
+}
+.modal-close:hover { border-color:var(--red); color:var(--red); }
+
+/* ═══════════════════════════════════════════════════
+   DATA TABLE
+═══════════════════════════════════════════════════ */
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+thead th {
+  padding:11px 16px; text-align:left;
+  font-size:.7rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.07em; color:var(--muted); background:var(--bg3);
+  border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td {
+  padding:12px 16px; font-size:.83rem;
+  border-bottom:1px solid rgba(255,255,255,.03);
+  white-space:nowrap;
+  transition:background .15s;
+}
+tbody tr:hover td { background:var(--bg3); }
+tbody tr:last-child td { border-bottom:none; }
+.live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:live-pulse 2s ease-in-out infinite; display:inline-block; }
+@keyframes live-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.4);} 50%{box-shadow:0 0 0 5px rgba(16,185,129,0);} }
+
+/* ═══════════════════════════════════════════════════
+   MAP SECTION
+═══════════════════════════════════════════════════ */
+#map { height:500px; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); }
+.leaflet-container { background:#111318; }
+
+/* ═══════════════════════════════════════════════════
+   ALERTS
+═══════════════════════════════════════════════════ */
+.alert-item {
+  display:flex; align-items:flex-start; gap:14px;
+  padding:14px 18px; border-radius:var(--radius-sm);
+  border:1px solid var(--border); background:var(--bg3);
+  margin-bottom:10px; transition:all .2s;
+}
+.alert-item:hover { border-color:var(--border2); }
+.alert-icon {
+  width:38px; height:38px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:.9rem; flex-shrink:0;
+}
+.alert-body { flex:1; min-width:0; }
+.alert-title { font-size:.88rem; font-weight:600; }
+.alert-meta { font-size:.75rem; color:var(--muted); margin-top:3px; }
+.alert-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+.sev-badge {
+  font-size:.65rem; font-weight:800; padding:2px 8px; border-radius:999px;
+  text-transform:uppercase; letter-spacing:.05em;
+}
+.sev-LOW      { background:rgba(107,122,153,.2); color:var(--muted); }
+.sev-MEDIUM   { background:rgba(234,179,8,.15); color:var(--yellow); }
+.sev-HIGH     { background:rgba(239,68,68,.15); color:var(--red2); }
+.sev-CRITICAL { background:rgba(239,68,68,.25); color:var(--red2); animation:pulse-badge 1s ease-in-out infinite; }
+.resolve-btn {
+  font-size:.7rem; padding:3px 10px; border-radius:6px; cursor:pointer;
+  background:rgba(16,185,129,.1); border:1px solid rgba(16,185,129,.3);
+  color:var(--green2); transition:all .2s;
+}
+.resolve-btn:hover { background:rgba(16,185,129,.2); }
+
+/* ═══════════════════════════════════════════════════
+   SETTINGS
+═══════════════════════════════════════════════════ */
+.settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:700px) { .settings-grid { grid-template-columns:1fr; } }
+
+.setting-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 0; border-bottom:1px solid var(--border);
+}
+.setting-row:last-child { border-bottom:none; }
+.setting-label { font-size:.85rem; font-weight:500; }
+.setting-desc  { font-size:.73rem; color:var(--muted); margin-top:2px; }
+
+.range-wrap { display:flex; align-items:center; gap:10px; }
+.range-wrap input[type=range] { width:140px; accent-color:var(--amber); cursor:pointer; }
+.range-val { font-family:'JetBrains Mono',monospace; font-size:.82rem; color:var(--amber); min-width:40px; text-align:right; }
+
+.toggle { position:relative; width:42px; height:24px; }
+.toggle input { opacity:0; width:0; height:0; }
+.toggle-slider {
+  position:absolute; inset:0; border-radius:999px;
+  background:var(--bg4); border:1px solid var(--border2);
+  cursor:pointer; transition:all .25s;
+}
+.toggle-slider::before {
+  content:''; position:absolute; width:16px; height:16px;
+  left:3px; top:3px; border-radius:50%; background:var(--muted);
+  transition:transform .25s, background .25s;
+}
+.toggle input:checked + .toggle-slider { background:rgba(245,158,11,.2); border-color:var(--amber); }
+.toggle input:checked + .toggle-slider::before { transform:translateX(18px); background:var(--amber); }
+
+/* Notification config panels */
+[id$="Config"] {
+  background:var(--bg3); border-radius:10px; padding:14px 16px;
+  margin:4px 0 8px; border:1px solid var(--border);
+  animation:fadeIn .2s ease;
+}
+@keyframes fadeIn { from{opacity:0;transform:translateY(-4px);} to{opacity:1;transform:none;} }
+[id$="Config"] .field label { color:var(--muted); font-size:.68rem; }
+[id$="Config"] .field-wrap input { background:var(--bg2); font-size:.83rem; }
+
+/* ═══════════════════════════════════════════════════
+   PROFILE
+═══════════════════════════════════════════════════ */
+.profile-header {
+  display:flex; align-items:center; gap:20px; margin-bottom:28px;
+  padding:24px; background:var(--bg3); border-radius:var(--radius); border:1px solid var(--border);
+}
+.profile-avatar-lg {
+  width:72px; height:72px; border-radius:50%;
+  background:linear-gradient(135deg,var(--amber),var(--honey));
+  display:flex; align-items:center; justify-content:center;
+  font-size:2rem; font-weight:800; color:#0a0b0d; flex-shrink:0;
+  overflow:hidden; cursor:pointer; position:relative;
+}
+.profile-avatar-lg:hover::after {
+  content:'📷'; position:absolute; inset:0; background:rgba(0,0,0,.5);
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.4rem; border-radius:50%;
+}
+
+/* ═══════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+═══════════════════════════════════════════════════ */
+#toastContainer {
+  position:fixed; top:72px; right:20px; z-index:9000;
+  display:flex; flex-direction:column; gap:8px; pointer-events:none;
+}
+.toast {
+  display:flex; align-items:center; gap:10px;
+  padding:12px 16px; border-radius:11px; font-size:.83rem; font-weight:500;
+  box-shadow:var(--shadow-lg); pointer-events:all;
+  animation:slideIn .3s ease; max-width:320px;
+  transition:opacity .3s, transform .3s;
+}
+.toast.out { opacity:0; transform:translateX(20px); }
+@keyframes slideIn { from{transform:translateX(40px);opacity:0;} to{transform:translateX(0);opacity:1;} }
+.toast-success { background:#0a2419; border:1px solid var(--green); color:var(--green2); }
+.toast-error   { background:#2a0a0a; border:1px solid var(--red);   color:var(--red2);   }
+.toast-warning { background:#2a1a00; border:1px solid var(--amber); color:var(--amber2); }
+.toast-info    { background:#0a1a3a; border:1px solid var(--blue);  color:var(--blue2);  }
+
+/* ═══════════════════════════════════════════════════
+   SKELETON
+═══════════════════════════════════════════════════ */
+.skel {
+  background:linear-gradient(90deg,var(--bg3) 25%,var(--bg4) 50%,var(--bg3) 75%);
+  background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px;
+}
+@keyframes shimmer { 0%{background-position:200% 0;} 100%{background-position:-200% 0;} }
+
+/* ═══════════════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════════════ */
+@keyframes spin  { to{transform:rotate(360deg);} }
+@keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);} }
+.spin { animation:spin .8s linear infinite; }
+.gap-8 { gap:8px; }
+.flex { display:flex; }
+.items-center { align-items:center; }
+.mb-4 { margin-bottom:16px; }
+.mb-6 { margin-bottom:24px; }
+.grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media(max-width:700px) { .grid-2 { grid-template-columns:1fr; } }
+
+/* ── SYSTEM STATUS FOOTER ── */
+.sys-status-bar {
+  height:36px; background:var(--bg2); border-top:1px solid var(--border);
+  display:flex; align-items:center; padding:0 20px; gap:16px; flex-shrink:0;
+}
+.sys-item { display:flex; align-items:center; gap:6px; font-size:.7rem; color:var(--muted); }
+
+/* ── MOBILE SIDEBAR TOGGLE ── */
+.sidebar-toggle {
+  display:none; width:34px; height:34px; border-radius:9px;
+  background:var(--bg3); border:1px solid var(--border);
+  align-items:center; justify-content:center;
+  cursor:pointer; color:var(--muted); font-size:.9rem;
+}
+@media(max-width:768px) {
+  .sidebar { position:fixed; left:0; top:0; bottom:0; z-index:200; transform:translateX(-100%); }
+  .sidebar.open { transform:translateX(0); }
+  .sidebar-toggle { display:flex; }
+  #app { overflow:auto; }
+}
+
+/* ── COMPARE CHART ── */
+.compare-grid { display:grid; grid-template-columns:200px 1fr; gap:16px; }
+@media(max-width:900px) { .compare-grid { grid-template-columns:1fr; } }
+.hive-check-list { display:flex; flex-direction:column; gap:8px; }
+.hive-check {
+  display:flex; align-items:center; gap:9px;
+  padding:10px 12px; border-radius:9px; cursor:pointer;
+  border:1.5px solid var(--border); background:var(--bg3);
+  transition:all .2s; user-select:none;
+}
+.hive-check.selected { border-color:var(--amber); background:rgba(245,158,11,.08); }
+.hive-check-dot { width:10px; height:10px; border-radius:50%; }
+.hive-check-label { font-size:.82rem; font-weight:500; }
+
+/* ── ANALYTICS overlay select ── */
+.overlay-select {
+  background:var(--bg3); border:1px solid var(--border2);
+  color:var(--text); border-radius:8px; padding:6px 10px;
+  font-size:.78rem; cursor:pointer; outline:none;
+}
+.overlay-select:focus { border-color:var(--amber); }
+
+/* ═══════════════════════════════════════════════════
+   DB VIEWER & VISITORS
+═══════════════════════════════════════════════════ */
+.db-table-wrap { overflow-x:auto; margin-bottom:24px; }
+.db-table-label {
+  font-size:.75rem; font-weight:700; text-transform:uppercase;
+  letter-spacing:.08em; color:var(--amber); margin-bottom:8px;
+  display:flex; align-items:center; gap:8px;
+}
+.db-table-label .live-dot { margin-left:4px; }
+.db-tbl { width:100%; border-collapse:collapse; font-size:.8rem; }
+.db-tbl thead th {
+  padding:8px 12px; text-align:left; font-size:.67rem; font-weight:700;
+  text-transform:uppercase; letter-spacing:.07em; color:var(--muted2);
+  background:var(--bg4); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+.db-tbl tbody td {
+  padding:9px 12px; border-bottom:1px solid rgba(255,255,255,.03);
+  white-space:nowrap; font-family:'JetBrains Mono',monospace; color:var(--text);
+}
+.db-tbl tbody tr:hover td { background:var(--bg4); }
+.db-tbl tbody tr:last-child td { border-bottom:none; }
+
+.visitor-card {
+  display:flex; align-items:center; gap:12px;
+  padding:12px 16px; border-radius:10px;
+  background:var(--bg3); border:1px solid var(--border);
+  margin-bottom:10px; transition:border-color .2s;
+}
+.visitor-card:hover { border-color:var(--border2); }
+.visitor-avatar {
+  width:36px; height:36px; border-radius:50%;
+  background:linear-gradient(135deg,var(--blue),var(--purple));
+  display:flex; align-items:center; justify-content:center;
+  font-size:.88rem; font-weight:800; color:#fff; flex-shrink:0;
+}
+.visitor-info { flex:1; }
+.visitor-name { font-size:.88rem; font-weight:600; }
+.visitor-meta { font-size:.72rem; color:var(--muted); margin-top:2px; }
+.visitors-stat {
+  display:flex; gap:20px; margin-bottom:20px; flex-wrap:wrap;
+}
+.vstat {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:var(--radius-sm); padding:14px 20px; flex:1; min-width:120px;
+}
+.vstat .num { font-size:2rem; font-weight:800; color:var(--blue2); }
+.vstat .lbl { font-size:.72rem; color:var(--muted); margin-top:2px; }
+.ws-live-badge {
+  display:inline-flex; align-items:center; gap:5px;
+  background:rgba(16,185,129,.12); border:1px solid rgba(16,185,129,.3);
+  color:var(--green2); border-radius:999px; padding:3px 10px;
+  font-size:.7rem; font-weight:600; margin-left:8px;
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     AUTH SCREEN
+═══════════════════════════════════════ -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="bee">🐝</span>
+      <h1>Smart Apiary</h1>
+      <p>IoT Beehive Monitoring Platform</p>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Sign In</button>
+      <button class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</button>
+    </div>
+
+    <!-- LOGIN -->
+    <div class="auth-page active" id="loginPage">
+      <div class="auth-err" id="loginErr"><i class="fas fa-circle-exclamation"></i><span id="loginErrTxt"></span></div>
+      <div class="field">
+        <label>Username</label>
+        <div class="field-wrap">
+          <i class="fas fa-user prefix"></i>
+          <input type="text" id="loginUser" placeholder="Enter username" autocomplete="username">
+        </div>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <div class="field-wrap">
+          <i class="fas fa-lock prefix"></i>
+          <input type="password" id="loginPass" placeholder="Enter password" autocomplete="current-password">
+          <button class="eye-btn" onclick="toggleEye('loginPass','loginEye')" type="button">
+            <i class="fas fa-eye" id="loginEye"></i>
+          </button>
+        </div>
+      </div>
+      <button class="btn-primary" id="loginBtn" onclick="doLogin()">
+        <span class="btn-txt"><i class="fas fa-sign-in-alt"></i> &nbsp;Sign In</span>
+        <div class="spinner"></div>
+      </button>
+    </div>
+
+    <!-- SIGNUP -->
+    <div class="auth-page" id="signupPage">
+      <div class="auth-err" id="signupErr"><i class="fas fa-circle-exclamation"></i><span id="signupErrTxt"></span></div>
+      <div class="auth-ok"  id="signupOk" ><i class="fas fa-circle-check"></i><span>Account created! Please sign in.</span></div>
+      <div class="field">
+        <label>Username</label>
+        <div class="field-wrap">
+          <i class="fas fa-user prefix"></i>
+          <input type="text" id="signupUser" placeholder="Choose a username (min 3 chars)">
+        </div>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <div class="field-wrap">
+          <i class="fas fa-lock prefix"></i>
+          <input type="password" id="signupPass" placeholder="At least 6 characters">
+          <button class="eye-btn" onclick="toggleEye('signupPass','signupEye')" type="button">
+            <i class="fas fa-eye" id="signupEye"></i>
+          </button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <div class="field-wrap">
+          <i class="fas fa-shield-halved prefix"></i>
+          <input type="password" id="signupPass2" placeholder="Repeat password">
+        </div>
+      </div>
+      <button class="btn-primary" id="signupBtn" onclick="doSignup()">
+        <span class="btn-txt"><i class="fas fa-user-plus"></i> &nbsp;Create Account</span>
+        <div class="spinner"></div>
+      </button>
+      <p style="text-align:center;font-size:.73rem;color:var(--muted);margin-top:14px;">
+        All new accounts are created as <strong style="color:var(--amber)">Viewer</strong> role.
+      </p>
+    </div>
+
+    <!-- <p style="text-align:center;font-size:.7rem;color:var(--muted2);margin-top:20px;">
+      🔐 SHA-256 encrypted &nbsp;·&nbsp; Smart Apiary v2.0
+    </p> -->
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     APP
+═══════════════════════════════════════ -->
+<div id="app">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🐝</div>
+      <div>
+        <h2>Smart Apiary</h2>
+        <p>IoT Platform v2.0</p>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-label">Monitoring</div>
+        <div class="nav-item active" onclick="navigate('dashboard')">
+          <i class="fas fa-gauge-high"></i> Dashboard
+        </div>
+        <div class="nav-item" onclick="navigate('analytics')">
+          <i class="fas fa-chart-line"></i> Analytics
+        </div>
+        <div class="nav-item" onclick="navigate('map')">
+          <i class="fas fa-map-location-dot"></i> Map View
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-label">Management</div>
+        <div class="nav-item" onclick="navigate('alerts')">
+          <i class="fas fa-bell"></i> Alerts
+          <span class="nav-badge" id="alertBadge" style="display:none">0</span>
+        </div>
+        <div class="nav-item" onclick="navigate('settings')">
+          <i class="fas fa-sliders"></i> Settings
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-label">System</div>
+        <div class="nav-item" onclick="navigate('dbviewer')">
+          <i class="fas fa-database"></i> DB Viewer
+        </div>
+        <div class="nav-item" onclick="navigate('visitors')">
+          <i class="fas fa-users"></i> Visitors
+          <span class="nav-badge" id="visitorBadge" style="display:none;background:var(--blue)">0</span>
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-label">Account</div>
+        <div class="nav-item" onclick="navigate('profile')">
+          <i class="fas fa-circle-user"></i> Profile
+        </div>
+        <div class="nav-item" onclick="doLogout()" style="color:var(--red2);">
+          <i class="fas fa-sign-out-alt"></i> Logout
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-card" onclick="navigate('profile')">
+        <div class="user-avatar" id="sidebarAvatar" style="overflow:hidden;padding:0;"></div>
+        <div class="user-info">
+          <div class="user-name" id="sidebarName">Admin</div>
+          <span class="user-role" id="sidebarRole">admin</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main-area">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn sidebar-toggle" onclick="toggleSidebar()"><i class="fas fa-bars"></i></button>
+        <div>
+          <div class="page-title" id="topbarTitle">Dashboard</div>
+          <div class="page-sub" id="topbarSub">Real-time beehive monitoring</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <div class="ws-status disconnected" id="wsChip">
+          <div class="dot err" id="wsDot"></div>
+          <span id="wsTxt">Disconnected</span>
+        </div>
+        <div class="status-chip"><div class="dot" id="dotDB"></div><span id="dbTxt">DB</span></div>
+        <div class="status-chip"><div class="dot" id="dotMQTT"></div><span id="mqttTxt">MQTT</span></div>
+        <div class="clock-chip mono" id="clock">00:00:00</div>
+        <div class="icon-btn" onclick="refreshAll()" title="Refresh"><i class="fas fa-rotate-right" id="refreshIco"></i></div>
+      </div>
+    </header>
+
+    <!-- CONTENT -->
+    <main class="content" id="content">
+
+      <!-- ── DASHBOARD ── -->
+      <div class="section active" id="sec-dashboard">
+        <div class="sec-hdr">
+          <h2>🐝 Live Dashboard</h2>
+          <div class="sec-hdr-right">
+            <div class="last-updated"><i class="fas fa-clock"></i><span id="lastUpdated">Never</span></div>
+          </div>
+        </div>
+
+        <!-- HIVE SELECTOR -->
+        <div class="hive-bar" id="hiveBar">
+          <div class="hive-chip active" onclick="selectHive('all')" data-hive="all">
+            <div class="hive-dot" style="background:var(--amber)"></div> All Hives
+          </div>
+        </div>
+
+        <!-- METRIC CARDS -->
+        <div class="metrics-grid" id="metricsGrid">
+          <div class="metric-card"><div class="skel" style="height:130px"></div></div>
+          <div class="metric-card"><div class="skel" style="height:130px"></div></div>
+          <div class="metric-card"><div class="skel" style="height:130px"></div></div>
+          <div class="metric-card"><div class="skel" style="height:130px"></div></div>
+          <div class="metric-card"><div class="skel" style="height:130px"></div></div>
+        </div>
+
+        <!-- CHARTS -->
+        <div class="sec-hdr" style="margin-top:4px;">
+          <h2>📈 Sensor Trends</h2>
+          <div class="sec-hdr-right">
+            <div class="time-tabs" id="mainTimeTabs">
+              <button class="time-tab active" onclick="setTimeRange(1,'this')">1h</button>
+              <button class="time-tab" onclick="setTimeRange(24,'this')">24h</button>
+              <button class="time-tab" onclick="setTimeRange(168,'this')">7d</button>
+              <button class="time-tab" onclick="setTimeRange(720,'this')">30d</button>
+            </div>
+          </div>
+        </div>
+        <div class="charts-grid">
+          <div class="chart-card">
+            <div class="chart-hdr">
+              <div class="chart-title">
+                <div class="chart-icon" style="background:rgba(239,68,68,.15);color:var(--red)"><i class="fas fa-thermometer-half"></i></div>
+                Temperature
+              </div>
+              <div class="chart-actions">
+                <button class="reset-btn" onclick="resetZoom('temp')" title="Reset zoom"><i class="fas fa-compress"></i></button>
+                <button class="zoom-btn" onclick="openZoom('temp')" title="Fullscreen"><i class="fas fa-expand"></i></button>
+              </div>
+            </div>
+            <div class="chart-body"><canvas id="tempChart" height="180"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-hdr">
+              <div class="chart-title">
+                <div class="chart-icon" style="background:rgba(59,130,246,.15);color:var(--blue)"><i class="fas fa-droplet"></i></div>
+                Humidity
+              </div>
+              <div class="chart-actions">
+                <button class="reset-btn" onclick="resetZoom('humidity')" title="Reset zoom"><i class="fas fa-compress"></i></button>
+                <button class="zoom-btn" onclick="openZoom('humidity')" title="Fullscreen"><i class="fas fa-expand"></i></button>
+              </div>
+            </div>
+            <div class="chart-body"><canvas id="humidChart" height="180"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-hdr">
+              <div class="chart-title">
+                <div class="chart-icon" style="background:rgba(16,185,129,.15);color:var(--green)"><i class="fas fa-weight-hanging"></i></div>
+                Hive Weight
+              </div>
+              <div class="chart-actions">
+                <button class="reset-btn" onclick="resetZoom('weight')" title="Reset zoom"><i class="fas fa-compress"></i></button>
+                <button class="zoom-btn" onclick="openZoom('weight')" title="Fullscreen"><i class="fas fa-expand"></i></button>
+              </div>
+            </div>
+            <div class="chart-body"><canvas id="weightChart" height="180"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-hdr">
+              <div class="chart-title">
+                <div class="chart-icon" style="background:rgba(139,92,246,.15);color:var(--purple)"><i class="fas fa-battery-three-quarters"></i></div>
+                Battery
+              </div>
+              <div class="chart-actions">
+                <button class="reset-btn" onclick="resetZoom('battery')" title="Reset zoom"><i class="fas fa-compress"></i></button>
+                <button class="zoom-btn" onclick="openZoom('battery')" title="Fullscreen"><i class="fas fa-expand"></i></button>
+              </div>
+            </div>
+            <div class="chart-body"><canvas id="battChart" height="180"></canvas></div>
+          </div>
+        </div>
+
+        <!-- RECENT DATA TABLE -->
+        <div class="card">
+          <div class="sec-hdr" style="margin-bottom:14px;">
+            <h2 style="font-size:.9rem;display:flex;align-items:center;gap:8px;">
+              <span class="live-dot"></span> Live Feed
+            </h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>🌡 Temp</th>
+                  <th>💧 Humidity</th>
+                  <th>⚖ Weight</th>
+                  <th>🔋 Battery</th>
+                  <th>🔊 Sound</th>
+                  <th>🐝 Swarm</th>
+                </tr>
+              </thead>
+              <tbody id="feedTable">
+                <tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted)">
+                  <i class="fas fa-circle-notch spin" style="color:var(--amber);font-size:1.3rem"></i>
+                  <p style="margin-top:8px">Loading data...</p>
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── ANALYTICS ── -->
+      <div class="section" id="sec-analytics">
+        <div class="sec-hdr">
+          <h2>📊 Analytics</h2>
+          <div class="sec-hdr-right">
+            <select class="overlay-select" id="overlayMetric" onchange="updateCompare()">
+              <option value="temperature">Temperature</option>
+              <option value="humidity">Humidity</option>
+              <option value="weight">Weight</option>
+              <option value="battery">Battery</option>
+            </select>
+            <div class="time-tabs">
+              <button class="time-tab active" onclick="setAnalyticsTime(1,this)">1h</button>
+              <button class="time-tab" onclick="setAnalyticsTime(24,this)">24h</button>
+              <button class="time-tab" onclick="setAnalyticsTime(168,this)">7d</button>
+              <button class="time-tab" onclick="setAnalyticsTime(720,this)">30d</button>
+            </div>
+          </div>
+        </div>
+        <div class="compare-grid mb-6">
+          <div>
+            <div class="card" style="margin-bottom:12px;">
+              <div style="font-size:.8rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;">Select Hives</div>
+              <div class="hive-check-list" id="hiveCheckList"></div>
+            </div>
+          </div>
+          <div class="card">
+            <canvas id="compareChart" height="280"></canvas>
+          </div>
+        </div>
+        <!-- Anomaly section -->
+        <div class="card">
+          <div style="font-size:.9rem;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px;">
+            <i class="fas fa-triangle-exclamation" style="color:var(--yellow)"></i> Anomaly Detection
+          </div>
+          <div id="anomalyList">
+            <div style="color:var(--muted);font-size:.83rem;text-align:center;padding:20px;">
+              Anomalies will appear here based on threshold breaches.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── MAP ── -->
+      <div class="section" id="sec-map">
+        <div class="sec-hdr"><h2>🗺 Hive Map</h2></div>
+        <div class="grid-2 mb-4">
+          <div class="card" style="display:flex;align-items:center;gap:14px;">
+            <div style="font-size:1.5rem;">🟢</div>
+            <div><div style="font-weight:600;font-size:.85rem;">Safe Hives</div><div class="mono" style="font-size:1.4rem;font-weight:800;color:var(--green)" id="safeCount">0</div></div>
+          </div>
+          <div class="card" style="display:flex;align-items:center;gap:14px;">
+            <div style="font-size:1.5rem;">🔴</div>
+            <div><div style="font-weight:600;font-size:.85rem;">Alert Hives</div><div class="mono" style="font-size:1.4rem;font-weight:800;color:var(--red)" id="alertCount">0</div></div>
+          </div>
+        </div>
+        <div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+          <div id="map"></div>
+        </div>
+        <div class="card" id="mapHiveDetail" style="display:none;">
+          <div style="font-size:.9rem;font-weight:700;margin-bottom:12px;">Hive Details</div>
+          <div id="mapDetailContent"></div>
+        </div>
+      </div>
+
+      <!-- ── ALERTS ── -->
+      <div class="section" id="sec-alerts">
+        <div class="sec-hdr">
+          <h2>🔔 Alert Center</h2>
+          <div class="sec-hdr-right">
+            <button onclick="clearResolvedAlerts()" style="font-size:.78rem;padding:6px 14px;border-radius:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red2);cursor:pointer;">Clear Resolved</button>
+          </div>
+        </div>
+        <div id="alertList">
+          <div style="text-align:center;padding:40px;color:var(--muted)">
+            <i class="fas fa-bell-slash" style="font-size:2rem;margin-bottom:12px;display:block;opacity:.4"></i>
+            No active alerts
+          </div>
+        </div>
+      </div>
+
+      <!-- ── SETTINGS ── -->
+      <div class="section" id="sec-settings">
+        <div class="sec-hdr"><h2>⚙ Settings</h2></div>
+        <div class="settings-grid">
+          <!-- Thresholds -->
+          <div class="card">
+            <div style="font-size:.88rem;font-weight:700;margin-bottom:16px;color:var(--amber);display:flex;align-items:center;gap:8px;">
+              <i class="fas fa-sliders"></i> Alert Thresholds
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-label">🌡 Max Temperature</div><div class="setting-desc">Alert if above this value</div></div>
+              <div class="range-wrap">
+                <input type="range" min="25" max="50" value="38" id="rngTemp" oninput="updateRange('rngTemp','valTemp')">
+                <span class="range-val" id="valTemp">38°C</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-label">💧 Min Humidity</div><div class="setting-desc">Alert if below this value</div></div>
+              <div class="range-wrap">
+                <input type="range" min="20" max="80" value="40" id="rngHum" oninput="updateRange('rngHum','valHum','%')">
+                <span class="range-val" id="valHum">40%</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-label">🔋 Min Battery</div><div class="setting-desc">Low battery alert</div></div>
+              <div class="range-wrap">
+                <input type="range" min="5" max="50" value="20" id="rngBat" oninput="updateRange('rngBat','valBat','%')">
+                <span class="range-val" id="valBat">20%</span>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><div class="setting-label">⚖ Weight Drop</div><div class="setting-desc">Alert on kg drop in 1h</div></div>
+              <div class="range-wrap">
+                <input type="range" min="0.5" max="10" step="0.5" value="3" id="rngWt" oninput="updateRange('rngWt','valWt','kg')">
+                <span class="range-val" id="valWt">3kg</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notifications -->
+          <div class="card">
+            <div style="font-size:.88rem;font-weight:700;margin-bottom:16px;color:var(--blue2);display:flex;align-items:center;gap:8px;">
+              <i class="fas fa-bell"></i> Notification Channels
+            </div>
+
+            <!-- Email -->
+            <div class="setting-row">
+              <div>
+                <div class="setting-label"><i class="fas fa-envelope" style="color:var(--blue2)"></i> Email Alerts</div>
+                <div class="setting-desc">Send alerts to an email address</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="togEmail" onchange="toggleNotifConfig('email',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div id="emailConfig" style="display:none;padding:10px 0 4px;border-bottom:1px solid var(--border);">
+              <div class="field" style="margin-bottom:10px;">
+                <label>Recipient Email</label>
+                <div class="field-wrap"><i class="fas fa-at prefix"></i><input type="email" id="cfgEmail" placeholder="you@example.com"></div>
+              </div>
+              <button onclick="saveNotifConfig('email')" style="font-size:.75rem;padding:6px 16px;border-radius:8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:var(--blue2);cursor:pointer;"><i class="fas fa-save"></i> Save</button>
+              <span id="emailSaveOk" style="display:none;font-size:.72rem;color:var(--green2);margin-left:10px;">✓ Saved</span>
+            </div>
+
+            <!-- Telegram -->
+            <div class="setting-row">
+              <div>
+                <div class="setting-label"><i class="fab fa-telegram" style="color:var(--blue2)"></i> Telegram Bot</div>
+                <div class="setting-desc">Receive alerts via Telegram</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="togTg" onchange="toggleNotifConfig('telegram',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div id="telegramConfig" style="display:none;padding:10px 0 4px;border-bottom:1px solid var(--border);">
+              <div class="field" style="margin-bottom:10px;">
+                <label>Your Telegram Chat ID</label>
+                <div class="field-wrap"><i class="fab fa-telegram prefix"></i><input type="text" id="cfgTgChatId" placeholder="e.g. 123456789"></div>
+                <div style="font-size:.7rem;color:var(--muted);margin-top:5px;">
+                  Message <a href="https://t.me/userinfobot" target="_blank" style="color:var(--blue2)">@userinfobot</a> on Telegram to get your Chat ID.
+                </div>
+              </div>
+              <button onclick="saveNotifConfig('telegram')" style="font-size:.75rem;padding:6px 16px;border-radius:8px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:var(--blue2);cursor:pointer;"><i class="fas fa-save"></i> Save & Enable</button>
+              <span id="telegramSaveOk" style="display:none;font-size:.72rem;color:var(--green2);margin-left:10px;">✓ Saved</span>
+            </div>
+
+            <!-- SMS -->
+            <div class="setting-row">
+              <div>
+                <div class="setting-label"><i class="fas fa-comment-sms" style="color:var(--green2)"></i> SMS Alerts</div>
+                <div class="setting-desc">Send SMS via Twilio (configure in .env)</div>
+              </div>
+              <label class="toggle"><input type="checkbox" id="togSms" onchange="toggleNotifConfig('sms',this.checked)"><span class="toggle-slider"></span></label>
+            </div>
+            <div id="smsConfig" style="display:none;padding:10px 0 4px;border-bottom:1px solid var(--border);">
+              <div class="field" style="margin-bottom:10px;">
+                <label>Phone Number</label>
+                <div class="field-wrap"><i class="fas fa-phone prefix"></i><input type="tel" id="cfgPhone" placeholder="+213xxxxxxxxx"></div>
+              </div>
+              <button onclick="saveNotifConfig('sms')" style="font-size:.75rem;padding:6px 16px;border-radius:8px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--green2);cursor:pointer;"><i class="fas fa-save"></i> Save</button>
+              <span id="smsSaveOk" style="display:none;font-size:.72rem;color:var(--green2);margin-left:10px;">✓ Saved</span>
+            </div>
+
+            <!-- Swarm sensitivity -->
+            <div class="setting-row" style="border-bottom:none;">
+              <div>
+                <div class="setting-label">🐝 Swarm Sensitivity</div>
+                <div class="setting-desc">Trigger level for swarm detection</div>
+              </div>
+              <div class="range-wrap">
+                <input type="range" min="1" max="10" value="5" id="rngSwarm" oninput="updateRange('rngSwarm','valSwarm','')">
+                <span class="range-val" id="valSwarm">5</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px;">
+          <div style="font-size:.88rem;font-weight:700;margin-bottom:16px;color:var(--green2);display:flex;align-items:center;gap:8px;">
+            <i class="fas fa-users-gear"></i> User Management <span style="color:var(--muted);font-weight:400;font-size:.75rem;">(Admin only)</span>
+          </div>
+          <div id="userManageTable">
+            <div style="color:var(--muted);font-size:.82rem;">Loading users...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── PROFILE ── -->
+      <div class="section" id="sec-profile">
+        <div class="sec-hdr"><h2>👤 My Profile</h2></div>
+        <div class="profile-header">
+          <div style="position:relative;flex-shrink:0;">
+            <div class="profile-avatar-lg" id="profileAvatar">A</div>
+            <label for="avatarUpload" title="Change photo" style="position:absolute;bottom:0;right:0;width:24px;height:24px;border-radius:50%;background:var(--amber);border:2px solid var(--bg2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:.65rem;color:#0a0b0d;">
+              <i class="fas fa-camera"></i>
+            </label>
+            <input type="file" id="avatarUpload" accept="image/*" style="display:none" onchange="handleAvatarUpload(event)">
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:1.3rem;font-weight:800;" id="profileName">Admin</div>
+            <span class="user-role admin" id="profileRole">admin</span>
+            <div style="font-size:.78rem;color:var(--muted);margin-top:8px;" id="profileMeta">Joined: —</div>
+            <div style="font-size:.78rem;color:var(--muted);" id="profileLastLogin">Last login: —</div>
+            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+              <button onclick="document.getElementById('avatarUpload').click()" style="font-size:.75rem;padding:5px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--amber);cursor:pointer;"><i class="fas fa-camera"></i> Change Photo</button>
+              <button onclick="removeAvatar()" style="font-size:.75rem;padding:5px 14px;border-radius:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red2);cursor:pointer;"><i class="fas fa-trash"></i> Remove</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Change password -->
+          <div class="card">
+            <div style="font-size:.88rem;font-weight:700;margin-bottom:18px;color:var(--amber);display:flex;align-items:center;gap:8px;">
+              <i class="fas fa-key"></i> Change Password
+            </div>
+            <div class="auth-err" id="pwErr" style="margin-bottom:14px;"><i class="fas fa-circle-exclamation"></i><span id="pwErrTxt"></span></div>
+            <div class="auth-ok"  id="pwOk"  style="margin-bottom:14px;"><i class="fas fa-circle-check"></i><span>Password updated!</span></div>
+            <div class="field"><label>Current Password</label><div class="field-wrap"><i class="fas fa-lock prefix"></i><input type="password" id="curPw" placeholder="Current password"></div></div>
+            <div class="field"><label>New Password</label><div class="field-wrap"><i class="fas fa-key prefix"></i><input type="password" id="newPw" placeholder="New password (min 6 chars)"></div></div>
+            <div class="field"><label>Confirm New</label><div class="field-wrap"><i class="fas fa-shield-halved prefix"></i><input type="password" id="newPw2" placeholder="Repeat new password"></div></div>
+            <button class="btn-primary" onclick="changePassword()" style="width:auto;padding:10px 24px;">Update Password</button>
+          </div>
+
+          <!-- System info -->
+          <div class="card">
+            <div style="font-size:.88rem;font-weight:700;margin-bottom:18px;color:var(--blue2);display:flex;align-items:center;gap:8px;">
+              <i class="fas fa-circle-info"></i> System Info
+            </div>
+            <div id="sysInfoPanel">
+              <div style="color:var(--muted);font-size:.82rem;">Loading...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- ── DB VIEWER ── -->
+      <div class="section" id="sec-dbviewer">
+        <div class="sec-hdr">
+          <h2>🗄 Database Viewer</h2>
+          <div class="sec-hdr-right">
+            <span class="ws-live-badge"><span class="live-dot"></span> Live WS</span>
+            <button onclick="dbRefreshNow()" style="font-size:.75rem;padding:6px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--amber);cursor:pointer;margin-left:8px;"><i class="fas fa-rotate-right"></i> Refresh</button>
+          </div>
+        </div>
+        <div style="font-size:.8rem;color:var(--muted);margin-bottom:18px;">
+          Live snapshot of all database tables — updates every 10 seconds via WebSocket. Admin only.
+        </div>
+        <div id="dbViewerContent">
+          <div style="text-align:center;padding:48px;color:var(--muted)"><i class="fas fa-database" style="font-size:2rem;opacity:.3;display:block;margin-bottom:12px"></i>Connecting to database WebSocket...</div>
+        </div>
+      </div>
+
+      <!-- ── VISITORS ── -->
+      <div class="section" id="sec-visitors">
+        <div class="sec-hdr">
+          <h2>👥 Live Visitors</h2>
+          <div class="sec-hdr-right">
+            <span class="ws-live-badge"><span class="live-dot"></span> Live WS</span>
+          </div>
+        </div>
+        <div style="font-size:.8rem;color:var(--muted);margin-bottom:18px;">
+          Real-time connected WebSocket clients — updates instantly when anyone connects or disconnects.
+        </div>
+        <div class="visitors-stat">
+          <div class="vstat">
+            <div class="num" id="visitorTotal">—</div>
+            <div class="lbl">Connected Now</div>
+          </div>
+          <div class="vstat" style="border-color:rgba(139,92,246,.3);">
+            <div class="num" style="color:var(--purple2)" id="visitorPeak">—</div>
+            <div class="lbl">Session Peak</div>
+          </div>
+          <div class="vstat" style="border-color:rgba(16,185,129,.3);">
+            <div class="num" style="color:var(--green2)" id="visitorLastSeen">—</div>
+            <div class="lbl">Last Update</div>
+          </div>
+        </div>
+        <div id="visitorList">
+          <div style="text-align:center;padding:40px;color:var(--muted)"><i class="fas fa-users" style="font-size:2rem;opacity:.3;display:block;margin-bottom:12px"></i>Connecting to visitor WebSocket...</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- SYSTEM STATUS BAR -->
+    <div class="sys-status-bar">
+      <div class="sys-item"><div class="dot ok" id="barDB"></div> Database</div>
+      <div class="sys-item"><div class="dot" id="barMQTT"></div> MQTT</div>
+      <div class="sys-item"><div class="dot" id="barWS"></div> WebSocket</div>
+      <div class="sys-item"><div class="dot ok"></div> API</div>
+      <div style="margin-left:auto;font-size:.68rem;color:var(--muted2);">
+        🐝 Smart Apiary v2.0 &nbsp;·&nbsp; <span id="wsCcount">0</span> client(s) connected
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CHART ZOOM MODAL -->
+<div id="chartModal">
+  <div class="modal-inner">
+    <div class="modal-hdr">
+      <span class="modal-title" id="modalTitle">Chart</span>
+      <div style="display:flex;gap:8px;">
+        <button class="reset-btn" onclick="resetZoomModal()" title="Reset zoom"><i class="fas fa-compress"></i></button>
+        <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+    <canvas id="modalChart"></canvas>
+  </div>
+</div>
+
+<!-- TOAST CONTAINER -->
+<div id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════
+     JAVASCRIPT
+═══════════════════════════════════════ -->
+<script>
+'use strict';
+// ════════════════════════════════════════════════════
+// STATE
+// ════════════════════════════════════════════════════
+const API    = window.location.origin;
+const WS_URL = API.replace(/^http/, 'ws') + '/ws';
+
+let authToken = null, currentUser = null, currentRole = null;
+let currentHive = 'all', currentHours = 24, analyticsHours = 24;
+let selectedHivesForCompare = new Set();
+
+let charts = {};       // { temp, humidity, weight, battery, compare, modal }
+let modalChartKey = null;
+
+let ws = null, wsReconnectTimer = null, wsReconnectAttempts = 0;
+let lastUpdatedTs = null;
+
+let alertsList = [];
+let hiveColors = ['#f59e0b','#3b82f6','#10b981','#8b5cf6','#ef4444','#14b8a6','#fb923c'];
+
+let leafletMap = null, leafletMarkers = {};
+
+let thresholds = { temp:38, humidity:40, battery:20, weight:3, swarm:5 };
+
+// ════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((t,i)=> t.classList.toggle('active', (tab==='login'&&i===0)||(tab==='signup'&&i===1)));
+  document.getElementById('loginPage').classList.toggle('active', tab==='login');
+  document.getElementById('signupPage').classList.toggle('active', tab==='signup');
+}
+
+function toggleEye(inputId, iconId) {
+  const inp = document.getElementById(inputId);
+  const ico = document.getElementById(iconId);
+  inp.type = inp.type==='password' ? 'text' : 'password';
+  ico.className = inp.type==='password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+}
+
+async function doLogin() {
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  const btn = document.getElementById('loginBtn');
+  const err = document.getElementById('loginErr');
+  err.classList.remove('show');
+  if (!username || !password) { showAuthErr('loginErr','loginErrTxt','Fill in all fields.'); return; }
+  setLoading(btn, true);
+  try {
+    const r = await fetch(`${API}/auth/login`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
+    const d = await r.json();
+    if (r.ok && d.access_token) {
+      authToken = d.access_token; currentUser = d.username; currentRole = d.role;
+      sessionStorage.setItem('apiary_token', authToken);
+      sessionStorage.setItem('apiary_user', currentUser);
+      sessionStorage.setItem('apiary_role', currentRole);
+      launchApp();
+    } else {
+      showAuthErr('loginErr','loginErrTxt', d.detail || 'Invalid credentials.');
+      document.getElementById('loginPass').value = '';
+    }
+  } catch(e) { showAuthErr('loginErr','loginErrTxt','Cannot reach server.'); }
+  setLoading(btn, false);
+}
+
+async function doSignup() {
+  const username = document.getElementById('signupUser').value.trim();
+  const password = document.getElementById('signupPass').value;
+  const confirm_password = document.getElementById('signupPass2').value;
+  const btn = document.getElementById('signupBtn');
+  document.getElementById('signupErr').classList.remove('show');
+  document.getElementById('signupOk').classList.remove('show');
+  if (!username||!password||!confirm_password) { showAuthErr('signupErr','signupErrTxt','Fill in all fields.'); return; }
+  setLoading(btn, true);
+  try {
+    const r = await fetch(`${API}/auth/signup`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,confirm_password})});
+    const d = await r.json();
+    if (r.ok) {
+      document.getElementById('signupOk').classList.add('show');
+      document.getElementById('signupUser').value='';
+      document.getElementById('signupPass').value='';
+      document.getElementById('signupPass2').value='';
+      setTimeout(()=>switchAuthTab('login'), 2000);
+    } else {
+      showAuthErr('signupErr','signupErrTxt', d.detail || 'Signup failed.');
+    }
+  } catch(e) { showAuthErr('signupErr','signupErrTxt','Cannot reach server.'); }
+  setLoading(btn, false);
+}
+
+function showAuthErr(divId, txtId, msg) {
+  document.getElementById(txtId).textContent = msg;
+  document.getElementById(divId).classList.add('show');
+}
+
+function setLoading(btn, on) {
+  btn.disabled = on; btn.classList.toggle('loading', on);
+}
+
+function doLogout() {
+  if (authToken) fetch(`${API}/auth/logout`, {method:'POST',headers:authHdr()}).catch(()=>{});
+  sessionStorage.clear();
+  authToken = currentUser = currentRole = null;
+  closeWS();
+  document.getElementById('app').classList.remove('show');
+  document.getElementById('authScreen').classList.remove('hide');
+  document.getElementById('loginPass').value='';
+  document.getElementById('loginErr').classList.remove('show');
+}
+
+function authHdr() { return authToken ? {Authorization:`Bearer ${authToken}`} : {}; }
+function jsonHdr() { return {...authHdr(), 'Content-Type':'application/json'}; }
+
+// Session restore
+(function() {
+  const t=sessionStorage.getItem('apiary_token');
+  const u=sessionStorage.getItem('apiary_user');
+  const r=sessionStorage.getItem('apiary_role');
+  if(t&&u) { authToken=t; currentUser=u; currentRole=r||'viewer'; launchApp(); }
+})();
+
+// Enter key on auth
+document.addEventListener('keydown', e=>{
+  if(e.key==='Enter' && !document.getElementById('authScreen').classList.contains('hide')) {
+    const lp = document.getElementById('loginPage');
+    if(lp.classList.contains('active')) doLogin(); else doSignup();
+  }
+});
+
+// ════════════════════════════════════════════════════
+// APP LAUNCH
+// ════════════════════════════════════════════════════
+function launchApp() {
+  document.getElementById('authScreen').classList.add('hide');
+  document.getElementById('app').classList.add('show');
+
+  // Set user info everywhere
+  const initials = (currentUser||'?').charAt(0).toUpperCase();
+  document.getElementById('sidebarAvatar').textContent = initials;
+  document.getElementById('sidebarName').textContent = currentUser;
+  document.getElementById('sidebarRole').textContent = currentRole;
+  document.getElementById('sidebarRole').className = 'user-role' + (currentRole==='admin'?' admin':'');
+  document.getElementById('profileAvatar').textContent = initials;
+  document.getElementById('profileName').textContent = currentUser;
+  document.getElementById('profileRole').textContent = currentRole;
+  document.getElementById('profileRole').className = 'user-role' + (currentRole==='admin'?' admin':'');
+
+  initCharts();
+  initMap();
+  connectWS();
+  startClock();
+  checkHealth();
+  setInterval(checkHealth, 30000);
+  refreshAll();
+  loadAvatar();
+  loadNotifSettings();
+}
+
+// ════════════════════════════════════════════════════
+// WEBSOCKET
+// ════════════════════════════════════════════════════
+function connectWS() {
+  if (ws && (ws.readyState===0||ws.readyState===1)) return;
+  setWSStatus('reconnecting');
+  const url = `${WS_URL}?token=${authToken}`;
+  ws = new WebSocket(url);
+
+  ws.onopen = () => {
+    wsReconnectAttempts = 0;
+    clearTimeout(wsReconnectTimer);
+    setWSStatus('connected');
+    toast('WebSocket connected — live data active', 'success');
+  };
+
+  ws.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'hive_update') {
+        processHiveUpdate(msg.data, msg.timestamp);
+      }
+    } catch(_) {}
+  };
+
+  ws.onclose = () => {
+    setWSStatus('disconnected');
+    scheduleReconnect();
+  };
+
+  ws.onerror = () => {
+    setWSStatus('disconnected');
+  };
+
+  // Keep-alive ping every 20s
+  const pingInterval = setInterval(()=>{
+    if(ws && ws.readyState===1) ws.send('ping');
+    else clearInterval(pingInterval);
+  }, 20000);
+}
+
+function closeWS() {
+  if(ws) { ws.close(); ws=null; }
+  clearTimeout(wsReconnectTimer);
+}
+
+function scheduleReconnect() {
+  if(wsReconnectAttempts >= 10) { toast('WebSocket reconnection failed after 10 attempts','error'); return; }
+  wsReconnectAttempts++;
+  const delay = Math.min(30000, 1000 * Math.pow(1.5, wsReconnectAttempts));
+  setWSStatus('reconnecting');
+  wsReconnectTimer = setTimeout(connectWS, delay);
+}
+
+function setWSStatus(state) {
+  const chip = document.getElementById('wsChip');
+  const dot  = document.getElementById('wsDot');
+  const txt  = document.getElementById('wsTxt');
+  const barDot = document.getElementById('barWS');
+  chip.className = 'ws-status ' + state;
+  if(state==='connected')    { dot.className='dot ok'; txt.textContent='Live'; barDot.className='dot ok'; }
+  else if(state==='reconnecting') { dot.className='dot connecting'; txt.textContent='Reconnecting...'; barDot.className='dot warn'; }
+  else                        { dot.className='dot err'; txt.textContent='Disconnected'; barDot.className='dot err'; }
+}
+
+// ════════════════════════════════════════════════════
+// HIVE DATA PROCESSING
+// ════════════════════════════════════════════════════
+let previousValues = {};
+
+function processHiveUpdate(hives, timestamp) {
+  if (!hives || !hives.length) return;
+  lastUpdatedTs = new Date();
+  updateLastUpdatedDisplay();
+
+  // Update hive bar
+  updateHiveBar(hives);
+
+  // Pick the hive to show in dashboard
+  let hive = currentHive === 'all' ? hives[0] : hives.find(h=>h.hive_id===currentHive) || hives[0];
+  if (!hive) return;
+
+  // Check alerts
+  hives.forEach(h => checkThresholdAlerts(h));
+
+  renderMetricCards(hive);
+  updateMapMarkers(hives);
+
+  // Load chart history
+  loadHistory(hive.hive_id);
+
+  // Update compare chart
+  if (selectedHivesForCompare.size > 0) updateCompare();
+}
+
+function updateLastUpdatedDisplay() {
+  const el = document.getElementById('lastUpdated');
+  function tick() {
+    if (!lastUpdatedTs) { el.textContent = 'Never'; return; }
+    const secs = Math.floor((Date.now() - lastUpdatedTs.getTime()) / 1000);
+    el.textContent = secs < 5 ? 'just now' : `${secs}s ago`;
+  }
+  tick();
+  clearInterval(window._luInterval);
+  window._luInterval = setInterval(tick, 1000);
+}
+
+// ════════════════════════════════════════════════════
+// HIVE BAR
+// ════════════════════════════════════════════════════
+let knownHives = new Set(['all']);
+
+function updateHiveBar(hives) {
+  const bar = document.getElementById('hiveBar');
+  hives.forEach((h, i) => {
+    if (!knownHives.has(h.hive_id)) {
+      knownHives.add(h.hive_id);
+      const color = hiveColors[i % hiveColors.length];
+      const chip = document.createElement('div');
+      chip.className = 'hive-chip';
+      chip.dataset.hive = h.hive_id;
+      chip.onclick = () => selectHive(h.hive_id);
+      chip.innerHTML = `<div class="hive-dot" style="background:${color}"></div>${escHtml(h.hive_id)}`;
+      bar.appendChild(chip);
+      // Add to compare list
+      addHiveToCompare(h.hive_id, color);
+    }
+    // Update swarm dot color
+    const chip = bar.querySelector(`[data-hive="${h.hive_id}"]`);
+    if (chip) {
+      const dot = chip.querySelector('.hive-dot');
+      if (dot) dot.style.background = h.system?.swarm ? 'var(--red)' : hiveColors[i%hiveColors.length];
+    }
+  });
+}
+
+function selectHive(id) {
+  currentHive = id;
+  document.querySelectorAll('.hive-chip').forEach(c=>c.classList.toggle('active', c.dataset.hive===id));
+  refreshAll();
+}
+
+// ════════════════════════════════════════════════════
+// METRIC CARDS
+// ════════════════════════════════════════════════════
+function getTrend(key, val) {
+  const prev = previousValues[key];
+  previousValues[key] = val;
+  if (prev === undefined) return 'flat';
+  if (val > prev + 0.1) return 'up';
+  if (val < prev - 0.1) return 'down';
+  return 'flat';
+}
+
+function trendIcon(t) { return t==='up' ? '↑' : t==='down' ? '↓' : '→'; }
+
+function getStatus(metric, val) {
+  if (metric==='temp')    return val > thresholds.temp ? 'critical' : val > thresholds.temp - 3 ? 'warning' : 'normal';
+  if (metric==='humidity')return val < thresholds.humidity ? 'warning' : 'normal';
+  if (metric==='battery') return val < thresholds.battery ? 'critical' : val < 30 ? 'warning' : 'normal';
+  if (metric==='swarm')   return val ? 'critical' : 'normal';
+  return 'normal';
+}
+
+function statusLabel(s) {
+  return {normal:'● Normal', warning:'⚠ Warning', critical:'🔴 Critical'}[s] || s;
+}
+
+function renderMetricCards(hive) {
+  const env  = hive.environment || {};
+  const sys  = hive.system || {};
+  const h    = hive.hive || {};
+  const temp = env.temperature || 0;
+  const hum  = env.humidity || 0;
+  const wt   = h.weight || 0;
+  const bat  = sys.battery || 0;
+  const swarm= sys.swarm || false;
+
+  const tT = getTrend('temp', temp), tH = getTrend('hum', hum);
+  const tW = getTrend('wt', wt),     tB = getTrend('bat', bat);
+  const stT = getStatus('temp',temp), stH = getStatus('humidity',hum);
+  const stB = getStatus('battery',bat), stS = getStatus('swarm',swarm?1:0);
+
+  // Swarm Activity Index: 0-100
+  const swarmIdx = swarm ? 100 : Math.min(100, Math.round((sys.sound||0) / 80 * 60));
+
+  document.getElementById('metricsGrid').innerHTML = `
+    ${metricCard('temp','🌡 Temperature',temp.toFixed(1),'°C',tT,stT,
+      (temp/50)*100,'linear-gradient(to right,#f97316,#ef4444)',
+      `background:rgba(239,68,68,.12);color:var(--red)`,
+      `background:linear-gradient(to right,#ef4444,#f97316)`)}
+    ${metricCard('hum','💧 Humidity',hum.toFixed(1),'%',tH,stH,
+      hum,'linear-gradient(to right,#3b82f6,#06b6d4)',
+      `background:rgba(59,130,246,.12);color:var(--blue)`,
+      `background:linear-gradient(to right,#06b6d4,#3b82f6)`)}
+    ${metricCard('wt','⚖ Hive Weight',wt.toFixed(1),'kg',tW,'normal',
+      Math.min((wt/50)*100,100),'linear-gradient(to right,#10b981,#84cc16)',
+      `background:rgba(16,185,129,.12);color:var(--green)`,
+      `background:linear-gradient(to right,#84cc16,#10b981)`)}
+    ${metricCard('bat','🔋 Battery',bat,'%',tB,stB,
+      bat, bat<20?'var(--red)':bat<50?'var(--yellow)':'linear-gradient(to right,#8b5cf6,#ec4899)',
+      `background:rgba(139,92,246,.12);color:var(--purple)`,
+      `background:${bat<20?'var(--red)':bat<50?'var(--yellow)':'linear-gradient(to right,#8b5cf6,#ec4899)'}`)}
+    ${metricCard('swarm','🐝 Swarm Index',swarmIdx,'',
+      swarm?'up':'flat', stS, swarmIdx,
+      swarm?'var(--red)':'linear-gradient(to right,var(--amber),var(--honey))',
+      `background:rgba(245,158,11,.12);color:var(--amber)`,
+      `background:${swarm?'var(--red)':'linear-gradient(to right,var(--amber),var(--honey))'}`)}
+  `;
+
+  // Draw sparklines (mini charts)
+  setTimeout(() => {
+    ['temp','hum','wt','bat','swarm'].forEach(k => {
+      const cv = document.getElementById(`spark_${k}`);
+      if (!cv) return;
+      const sparkData = getSparkData(k);
+      drawSparkline(cv, sparkData, k);
+    });
+  }, 0);
+}
+
+function metricCard(key, label, value, unit, trend, status, pct, fillGrad, iconStyle, barGrad) {
+  return `
+  <div class="metric-card">
+    <div class="top-bar" style="${barGrad}"></div>
+    <div class="card-hdr">
+      <div class="icon-wrap" style="${iconStyle}">
+        <i class="${metricIcon(key)}"></i>
+      </div>
+      <div class="trend ${trend}">${trendIcon(trend)} ${trend}</div>
+    </div>
+    <div class="label">${label}</div>
+    <div class="value">${value}<span class="unit">${unit}</span></div>
+    <div class="status-row">
+      <span class="status-badge ${status}">${statusLabel(status)}</span>
+    </div>
+    <div class="sparkline-wrap"><canvas id="spark_${key}" height="44"></canvas></div>
+    <div class="progress-bar">
+      <div class="progress-fill" style="width:${Math.min(100,pct)}%;${barGrad.includes('var(')?'background:'+barGrad:'background:'+fillGrad}"></div>
+    </div>
+  </div>`;
+}
+
+function metricIcon(k) {
+  return {temp:'fas fa-thermometer-half',hum:'fas fa-droplet',wt:'fas fa-weight-hanging',bat:'fas fa-battery-three-quarters',swarm:'fas fa-bug'}[k]||'fas fa-circle';
+}
+
+let sparkHistory = { temp:[], hum:[], wt:[], bat:[], swarm:[] };
+
+function getSparkData(k) { return sparkHistory[k] || []; }
+
+function drawSparkline(canvas, data, key) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.offsetWidth || 160, H = 44;
+  canvas.width = W; canvas.height = H;
+  ctx.clearRect(0,0,W,H);
+  if (data.length < 2) return;
+  const min = Math.min(...data), max = Math.max(...data);
+  const range = max - min || 1;
+  const colors = {temp:'#ef4444',hum:'#3b82f6',wt:'#10b981',bat:'#8b5cf6',swarm:'#f59e0b'};
+  const color = colors[key] || '#f59e0b';
+  ctx.beginPath();
+  data.forEach((v,i) => {
+    const x = (i/(data.length-1))*W;
+    const y = H - ((v-min)/range)*(H-8) - 4;
+    i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  });
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+  // Fill under line
+  ctx.lineTo(W,H); ctx.lineTo(0,H); ctx.closePath();
+  const grad = ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0, color+'40'); grad.addColorStop(1, color+'00');
+  ctx.fillStyle = grad; ctx.fill();
+}
+
+// ════════════════════════════════════════════════════
+// CHARTS
+// ════════════════════════════════════════════════════
+const CHART_COLORS = {
+  temp: { border:'#ef4444', bg:'rgba(239,68,68,0.08)' },
+  humidity: { border:'#3b82f6', bg:'rgba(59,130,246,0.08)' },
+  weight: { border:'#10b981', bg:'rgba(16,185,129,0.08)' },
+  battery: { border:'#8b5cf6', bg:'rgba(139,92,246,0.08)' },
+};
+
+function chartDefaults(color, label) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    interaction: { mode:'index', intersect:false },
+    animation: { duration:400 },
+    plugins: {
+      legend: { display:false },
+      tooltip: {
+        backgroundColor:'rgba(10,11,13,.95)',
+        titleColor:'#e8ecf4', bodyColor:'#6b7a99',
+        borderColor: color, borderWidth:1,
+        padding:12, cornerRadius:9, displayColors:false
+      },
+      zoom: {
+        zoom: { wheel:{ enabled:true }, pinch:{ enabled:true }, mode:'x' },
+        pan:  { enabled:true, mode:'x' }
+      }
+    },
+    scales: {
+      x: {
+        grid:  { color:'rgba(255,255,255,.04)', drawBorder:false },
+        ticks: { color:'#6b7a99', font:{ size:10, family:'JetBrains Mono' }, maxTicksLimit:8 }
+      },
+      y: {
+        grid:  { color:'rgba(255,255,255,.04)', drawBorder:false },
+        ticks: { color:'#6b7a99', font:{ size:10, family:'JetBrains Mono' } },
+        title: { display:true, text:label, color:'#6b7a99', font:{ size:10 } }
+      }
+    },
+    elements: { point:{ radius:0, hoverRadius:5 } }
+  };
+}
+
+function makeDataset(color, label) {
+  return {
+    label, data:[],
+    borderColor: color,
+    backgroundColor: color.replace('rgb','rgba').replace(')',',0.06)'),
+    borderWidth: 2, tension: 0.4, fill: true, pointRadius:0, pointHoverRadius:5
+  };
+}
+
+let chartLabels = [], chartData = { temp:[], humidity:[], weight:[], battery:[] };
+
+function initCharts() {
+  charts.temp = new Chart(document.getElementById('tempChart'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ ...makeDataset('#ef4444','°C'), backgroundColor:'rgba(239,68,68,.07)' }] },
+    options: chartDefaults('#ef4444','Temperature (°C)')
+  });
+  charts.humidity = new Chart(document.getElementById('humidChart'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ ...makeDataset('#3b82f6','%'), backgroundColor:'rgba(59,130,246,.07)' }] },
+    options: chartDefaults('#3b82f6','Humidity (%)')
+  });
+  charts.weight = new Chart(document.getElementById('weightChart'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ ...makeDataset('#10b981','kg'), backgroundColor:'rgba(16,185,129,.07)' }] },
+    options: chartDefaults('#10b981','Weight (kg)')
+  });
+  charts.battery = new Chart(document.getElementById('battChart'), {
+    type:'line',
+    data:{ labels:[], datasets:[{ ...makeDataset('#8b5cf6','%'), backgroundColor:'rgba(139,92,246,.07)' }] },
+    options: { ...chartDefaults('#8b5cf6','Battery (%)'), scales:{ ...chartDefaults('#8b5cf6','').scales, y:{ ...chartDefaults('','').scales.y, min:0, max:100 } } }
+  });
+  charts.compare = new Chart(document.getElementById('compareChart'), {
+    type:'line',
+    data:{ labels:[], datasets:[] },
+    options: { ...chartDefaults('#f59e0b','Value'), plugins:{ ...chartDefaults('','').plugins, legend:{ display:true, labels:{ color:'#e8ecf4', font:{ size:11 } } } } }
+  });
+}
+
+function updateCharts(history) {
+  if (!history || !history.length) return;
+  const rev = [...history].reverse();
+  const labels = rev.map(r => {
+    const d = new Date(r.timestamp);
+    return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  });
+  chartLabels = labels;
+  chartData = {
+    temp: rev.map(r=>r.temperature||0),
+    humidity: rev.map(r=>r.humidity||0),
+    weight: rev.map(r=>r.weight||0),
+    battery: rev.map(r=>r.battery||0)
+  };
+
+  // Update sparkline history (last 20 points)
+  sparkHistory.temp     = chartData.temp.slice(-20);
+  sparkHistory.hum      = chartData.humidity.slice(-20);
+  sparkHistory.wt       = chartData.weight.slice(-20);
+  sparkHistory.bat      = chartData.battery.slice(-20);
+  sparkHistory.swarm    = new Array(20).fill(0);
+
+  [['temp','temp'],['humidity','humidity'],['weight','weight'],['battery','battery']].forEach(([ck,dk])=>{
+    if (!charts[ck]) return;
+    charts[ck].data.labels = labels;
+    charts[ck].data.datasets[0].data = chartData[dk];
+    charts[ck].update('active');
+  });
+
+  // Update table
+  updateFeedTable(history);
+
+  // Detect anomalies
+  detectAnomalies(history);
+}
+
+function setTimeRange(hours, who) {
+  currentHours = hours;
+  document.querySelectorAll('#mainTimeTabs .time-tab').forEach(t => t.classList.remove('active'));
+  event?.target?.classList.add('active');
+  if (currentHive !== 'all') loadHistory(currentHive);
+  else loadAllAndShowFirst();
+}
+
+function resetZoom(key) { if(charts[key]) charts[key].resetZoom(); }
+
+// ── ZOOM / FULLSCREEN MODAL ──
+function openZoom(key) {
+  modalChartKey = key;
+  const cfgMap = {
+    temp:    { title:'Temperature (°C)', color:'#ef4444', data:chartData.temp },
+    humidity:{ title:'Humidity (%)',     color:'#3b82f6', data:chartData.humidity },
+    weight:  { title:'Hive Weight (kg)', color:'#10b981', data:chartData.weight },
+    battery: { title:'Battery (%)',      color:'#8b5cf6', data:chartData.battery },
+  };
+  const cfg = cfgMap[key];
+  document.getElementById('modalTitle').textContent = cfg.title;
+  document.getElementById('chartModal').classList.add('show');
+
+  if (charts.modal) charts.modal.destroy();
+  const canvas = document.getElementById('modalChart');
+  charts.modal = new Chart(canvas, {
+    type:'line',
+    data:{
+      labels: chartLabels,
+      datasets:[{
+        label: cfg.title, data: cfg.data,
+        borderColor: cfg.color,
+        backgroundColor: cfg.color + '12',
+        borderWidth: 2.5, tension:0.4, fill:true, pointRadius:0, pointHoverRadius:6
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      animation:{ duration:300 },
+      plugins:{
+        legend:{ display:true, labels:{ color:'#e8ecf4', font:{ size:12 } } },
+        tooltip:{ backgroundColor:'rgba(10,11,13,.95)', titleColor:'#e8ecf4', bodyColor:'#6b7a99', borderColor:cfg.color, borderWidth:1, padding:14, cornerRadius:10 },
+        zoom:{ zoom:{ wheel:{ enabled:true }, pinch:{ enabled:true }, mode:'x' }, pan:{ enabled:true, mode:'x' } }
+      },
+      scales:{
+        x:{ grid:{ color:'rgba(255,255,255,.04)' }, ticks:{ color:'#6b7a99', font:{ size:11, family:'JetBrains Mono' }, maxTicksLimit:12 } },
+        y:{ grid:{ color:'rgba(255,255,255,.04)' }, ticks:{ color:'#6b7a99', font:{ size:11, family:'JetBrains Mono' } } }
+      },
+      elements:{ point:{ radius:0, hoverRadius:6 } }
+    }
+  });
+}
+
+function resetZoomModal() { if(charts.modal) charts.modal.resetZoom(); }
+function closeModal() {
+  document.getElementById('chartModal').classList.remove('show');
+  if(charts.modal) { charts.modal.destroy(); charts.modal=null; }
+}
+// Close modal on Escape
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+// ════════════════════════════════════════════════════
+// COMPARE CHART
+// ════════════════════════════════════════════════════
+let hiveCheckData = {};
+
+function addHiveToCompare(hiveId, color) {
+  const list = document.getElementById('hiveCheckList');
+  const el = document.createElement('div');
+  el.className = 'hive-check selected';
+  el.dataset.hive = hiveId;
+  el.innerHTML = `<div class="hive-check-dot" style="background:${color}"></div><span class="hive-check-label">${escHtml(hiveId)}</span>`;
+  el.onclick = () => {
+    el.classList.toggle('selected');
+    if(el.classList.contains('selected')) selectedHivesForCompare.add(hiveId);
+    else selectedHivesForCompare.delete(hiveId);
+    updateCompare();
+  };
+  list.appendChild(el);
+  selectedHivesForCompare.add(hiveId);
+}
+
+async function updateCompare() {
+  const metric = document.getElementById('overlayMetric').value;
+  const metricKeyMap = { temperature:'temp', humidity:'humidity', weight:'weight', battery:'battery' };
+  const datasets = [];
+  const hives = [...selectedHivesForCompare];
+
+  for (let i=0; i<hives.length; i++) {
+    const hiveId = hives[i];
+    const color = hiveColors[i % hiveColors.length];
+    try {
+      const r = await fetch(`${API}/data/history/${hiveId}?hours=${analyticsHours}`, { headers:authHdr() });
+      if (!r.ok) continue;
+      const hist = await r.json();
+      const rev = [...hist].reverse();
+      const labels = rev.map(row=>new Date(row.timestamp).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
+      datasets.push({
+        label: hiveId,
+        data: rev.map(row=>row[metric]||0),
+        borderColor: color, backgroundColor: color+'15',
+        borderWidth:2, tension:0.4, fill:false, pointRadius:0, pointHoverRadius:5
+      });
+      if (i===0) charts.compare.data.labels = labels;
+    } catch(_) {}
+  }
+  charts.compare.data.datasets = datasets;
+  charts.compare.update('active');
+}
+
+function setAnalyticsTime(hours, btn) {
+  analyticsHours = hours;
+  document.querySelectorAll('#sec-analytics .time-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  updateCompare();
+}
+
+// ════════════════════════════════════════════════════
+// ANOMALY DETECTION
+// ════════════════════════════════════════════════════
+function detectAnomalies(history) {
+  const anomalies = [];
+  const temps = history.map(r=>r.temperature||0);
+  const mean = temps.reduce((a,b)=>a+b,0)/temps.length;
+  const std  = Math.sqrt(temps.map(v=>(v-mean)**2).reduce((a,b)=>a+b,0)/temps.length);
+  temps.forEach((v,i)=>{
+    if(Math.abs(v-mean) > 2*std) {
+      anomalies.push({ time: new Date(history[i].timestamp).toLocaleString(), value: v.toFixed(1), metric:'Temperature', delta: ((v-mean)/std).toFixed(1) });
+    }
+  });
+
+  const el = document.getElementById('anomalyList');
+  if (!anomalies.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;text-align:center;padding:20px;">No anomalies detected in current time range.</div>';
+    return;
+  }
+  el.innerHTML = anomalies.slice(0,10).map(a=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:9px;background:rgba(234,179,8,.06);border:1px solid rgba(234,179,8,.2);margin-bottom:8px;">
+      <i class="fas fa-triangle-exclamation" style="color:var(--yellow);font-size:1rem;"></i>
+      <div>
+        <div style="font-size:.83rem;font-weight:600;">${a.metric} anomaly: ${a.value}°C</div>
+        <div style="font-size:.73rem;color:var(--muted);">${a.time} &nbsp;·&nbsp; ${a.delta}σ deviation</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════════
+// MAP
+// ════════════════════════════════════════════════════
+function initMap() {
+  if (leafletMap) return;
+  leafletMap = L.map('map', { center:[28, 2], zoom:5, zoomControl:true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution:'© OpenStreetMap contributors © CARTO', maxZoom:19
+  }).addTo(leafletMap);
+}
+
+function makeMarkerIcon(color) {
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:20px;height:20px;border-radius:50%;background:${color};border:3px solid #fff;box-shadow:0 0 10px ${color}80;"></div>`,
+    iconSize:[20,20], iconAnchor:[10,10]
+  });
+}
+
+let safeC=0, alertC=0;
+function updateMapMarkers(hives) {
+  safeC=0; alertC=0;
+  hives.forEach((h,i) => {
+    const lat = h.gps?.latitude || 0;
+    const lng = h.gps?.longitude || 0;
+    if (!lat && !lng) return;
+    const isAlert = h.system?.swarm || (h.environment?.temperature||0) > thresholds.temp || (h.system?.battery||100) < thresholds.battery;
+    const color = isAlert ? '#ef4444' : '#10b981';
+    if (isAlert) alertC++; else safeC++;
+    if (leafletMarkers[h.hive_id]) {
+      leafletMarkers[h.hive_id].setLatLng([lat,lng]).setIcon(makeMarkerIcon(color));
+    } else {
+      const marker = L.marker([lat,lng], { icon:makeMarkerIcon(color) })
+        .addTo(leafletMap)
+        .on('click', ()=>showMapDetail(h));
+      marker.bindPopup(`<b>${escHtml(h.hive_id)}</b><br>Temp: ${h.environment?.temperature?.toFixed(1)||'--'}°C<br>Battery: ${h.system?.battery||'--'}%`);
+      leafletMarkers[h.hive_id] = marker;
+    }
+  });
+  document.getElementById('safeCount').textContent = safeC;
+  document.getElementById('alertCount').textContent = alertC;
+
+  // Auto-fit map only on FIRST load; never re-zoom on refresh so user can pan/zoom freely
+  if (!window._mapFitted && hives.length > 0 && hives.some(h=>h.gps?.latitude)) {
+    const coords = hives.filter(h=>h.gps?.latitude).map(h=>[h.gps.latitude, h.gps.longitude]);
+    if (coords.length) { leafletMap.fitBounds(coords, { padding:[40,40] }); window._mapFitted = true; }
+  }
+}
+
+function showMapDetail(hive) {
+  const panel = document.getElementById('mapHiveDetail');
+  const cnt   = document.getElementById('mapDetailContent');
+  panel.style.display = 'block';
+  cnt.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;">
+      ${detailTile('🌡 Temperature', (hive.environment?.temperature||0).toFixed(1)+'°C', 'var(--red)')}
+      ${detailTile('💧 Humidity', (hive.environment?.humidity||0).toFixed(1)+'%', 'var(--blue)')}
+      ${detailTile('⚖ Weight', (hive.hive?.weight||0).toFixed(1)+'kg', 'var(--green)')}
+      ${detailTile('🔋 Battery', (hive.system?.battery||0)+'%', 'var(--purple)')}
+      ${detailTile('🔊 Sound', (hive.system?.sound||0)+' dB', 'var(--teal)')}
+      ${detailTile('🐝 Swarm', hive.system?.swarm?'DETECTED':'Safe', hive.system?.swarm?'var(--red)':'var(--green)')}
+    </div>
+    <div style="margin-top:12px;font-size:.75rem;color:var(--muted);">
+      📍 ${hive.gps?.latitude?.toFixed(6)||'--'}, ${hive.gps?.longitude?.toFixed(6)||'--'}
+      &nbsp;·&nbsp;
+      <a href="https://www.google.com/maps?q=${hive.gps?.latitude||0},${hive.gps?.longitude||0}" target="_blank" style="color:var(--blue2);text-decoration:none;">
+        <i class="fas fa-external-link-alt"></i> Open in Maps
+      </a>
+    </div>
+  `;
+}
+function detailTile(label, val, color) {
+  return `<div style="background:var(--bg3);border-radius:9px;padding:12px;border:1px solid var(--border);">
+    <div style="font-size:.7rem;color:var(--muted);margin-bottom:4px;">${label}</div>
+    <div style="font-size:1.1rem;font-weight:700;color:${color};">${val}</div>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════
+// ALERTS ENGINE
+// ════════════════════════════════════════════════════
+let alertIdCounter = 0;
+let activeAlertKeys = new Set();
+
+function checkThresholdAlerts(hive) {
+  const checks = [
+    { key:`temp_${hive.hive_id}`,    condition:(hive.environment?.temperature||0)>thresholds.temp,    title:'High Temperature', sev:'HIGH',     msg:`${(hive.environment?.temperature||0).toFixed(1)}°C exceeds ${thresholds.temp}°C threshold` },
+    { key:`bat_${hive.hive_id}`,     condition:(hive.system?.battery||100)<thresholds.battery,        title:'Low Battery',      sev:'MEDIUM',   msg:`Battery at ${hive.system?.battery||0}% — below ${thresholds.battery}% threshold` },
+    { key:`swarm_${hive.hive_id}`,   condition:!!hive.system?.swarm,                                  title:'Swarm Detected!',  sev:'CRITICAL', msg:`Swarm activity detected in ${hive.hive_id}` },
+    { key:`nosig_${hive.hive_id}`,   condition:false,                                                 title:'No Signal',        sev:'LOW',      msg:`Hive ${hive.hive_id} has not reported` },
+  ];
+
+  checks.forEach(c=>{
+    if(c.condition && !activeAlertKeys.has(c.key)) {
+      activeAlertKeys.add(c.key);
+      addAlert({ id:++alertIdCounter, hive_id:hive.hive_id, title:c.title, msg:c.msg, severity:c.sev, timestamp:new Date().toISOString(), status:'active' });
+    }
+    if(!c.condition) activeAlertKeys.delete(c.key);
+  });
+}
+
+function addAlert(alert) {
+  alertsList.unshift(alert);
+  renderAlerts();
+  const badge = document.getElementById('alertBadge');
+  const active = alertsList.filter(a=>a.status==='active').length;
+  badge.textContent = active;
+  badge.style.display = active > 0 ? 'inline-block' : 'none';
+  if(alert.severity === 'CRITICAL') toast(`🚨 ${alert.title} — ${alert.hive_id}`, 'error');
+  else if(alert.severity === 'HIGH') toast(`⚠️ ${alert.title} — ${alert.hive_id}`, 'warning');
+}
+
+function renderAlerts() {
+  const el = document.getElementById('alertList');
+  if (!alertsList.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)"><i class="fas fa-bell-slash" style="font-size:2rem;opacity:.4;display:block;margin-bottom:12px"></i>No alerts</div>';
+    return;
+  }
+  el.innerHTML = alertsList.map(a => {
+    return (
+      '<div class="alert-item" id="alert-' + a.id + '" style="' + (a.status === 'resolved' ? 'opacity:.5;' : '') + '">' +
+        '<div class="alert-icon" style="' + alertIconStyle(a.severity) + '">' +
+          '<i class="' + alertIcon(a.severity) + '"></i>' +
+        '</div>' +
+        '<div class="alert-body">' +
+          '<div class="alert-title">' + escHtml(a.title) + '</div>' +
+          '<div class="alert-meta">' +
+            '<i class="fas fa-hive"></i> ' + escHtml(a.hive_id) +
+            ' &nbsp;·&nbsp; ' + new Date(a.timestamp).toLocaleString() +
+            ' &nbsp;·&nbsp; ' + escHtml(a.msg) +
+          '</div>' +
+        '</div>' +
+        '<div class="alert-right">' +
+          '<span class="sev-badge sev-' + a.severity + '">' + a.severity + '</span>' +
+          (a.status === 'active'
+            ? '<button class="resolve-btn" onclick="resolveAlert(' + a.id + ')">✓ Resolve</button>'
+            : '<span style="font-size:.7rem;color:var(--green2);">✓ Resolved</span>') +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+}
+
+function alertIcon(sev) {
+  return { CRITICAL:'fas fa-radiation', HIGH:'fas fa-triangle-exclamation', MEDIUM:'fas fa-battery-quarter', LOW:'fas fa-signal' }[sev]||'fas fa-bell';
+}
+function alertIconStyle(sev) {
+  return { CRITICAL:'background:rgba(239,68,68,.2);color:var(--red2)', HIGH:'background:rgba(234,179,8,.2);color:var(--yellow)', MEDIUM:'background:rgba(59,130,246,.2);color:var(--blue2)', LOW:'background:rgba(107,122,153,.2);color:var(--muted)' }[sev]||'';
+}
+
+function resolveAlert(id) {
+  const a = alertsList.find(x=>x.id===id);
+  if(a) { a.status='resolved'; activeAlertKeys.delete(`${a.title}_${a.hive_id}`); }
+  renderAlerts();
+  const active = alertsList.filter(a=>a.status==='active').length;
+  const badge = document.getElementById('alertBadge');
+  badge.textContent = active;
+  badge.style.display = active > 0 ? 'inline-block' : 'none';
+  toast('Alert resolved', 'success');
+}
+
+function clearResolvedAlerts() {
+  alertsList = alertsList.filter(a=>a.status!=='resolved');
+  renderAlerts();
+}
+
+// ════════════════════════════════════════════════════
+// API CALLS
+// ════════════════════════════════════════════════════
+async function loadHistory(hiveId) {
+  if (!hiveId || hiveId==='all') return;
+  try {
+    const r = await fetch(`${API}/data/history/${hiveId}?hours=${currentHours}`, { headers:authHdr() });
+    if (r.ok) updateCharts(await r.json());
+  } catch(_) {}
+}
+
+async function loadAllAndShowFirst() {
+  try {
+    const r = await fetch(`${API}/api/hives`, { headers:authHdr() });
+    if (!r.ok) return;
+    const hives = await r.json();
+    if (hives.length) {
+      processHiveUpdate(hives, new Date().toISOString());
+    }
+  } catch(_) {}
+}
+
+async function refreshAll() {
+  const ico = document.getElementById('refreshIco');
+  ico.classList.add('spin');
+  if (currentHive==='all') await loadAllAndShowFirst();
+  else {
+    try {
+      const r = await fetch(`${API}/api/hives/${currentHive}`, { headers:authHdr() });
+      if(r.ok) processHiveUpdate([await r.json()], new Date().toISOString());
+    } catch(_) {}
+    await loadHistory(currentHive);
+  }
+  setTimeout(()=>ico.classList.remove('spin'), 600);
+}
+
+async function checkHealth() {
+  try {
+    const r = await fetch(`${API}/health`);
+    if (!r.ok) return;
+    const h = await r.json();
+    // DB
+    const ok = h.database==='ok';
+    document.getElementById('dotDB').className = 'dot ' + (ok?'ok':'err');
+    document.getElementById('dbTxt').textContent = ok ? 'DB Online' : 'DB Error';
+    document.getElementById('barDB').className = 'dot ' + (ok?'ok':'err');
+    // MQTT
+    const mok   = h.mqtt === 'connected';
+    const mwarn = h.mqtt === 'not_configured' || h.mqtt === 'disabled' || h.mqtt === 'disconnected';
+    document.getElementById('dotMQTT').className   = 'dot '+(mok?'ok':mwarn?'warn':'err');
+    document.getElementById('mqttTxt').textContent = mok?'MQTT Online':mwarn?'MQTT Off':'MQTT Err';
+    document.getElementById('barMQTT').className   = 'dot '+(mok?'ok':mwarn?'warn':'err');
+    // WS clients
+    document.getElementById('wsCcount').textContent = h.websocket_clients||0;
+    // Update sys info in profile
+    renderSysInfo(h);
+  } catch(_) {}
+}
+
+// ════════════════════════════════════════════════════
+// PROFILE / SETTINGS
+// ════════════════════════════════════════════════════
+async function loadProfile() {
+  try {
+    const r = await fetch(`${API}/auth/me`, { headers:authHdr() });
+    if (!r.ok) return;
+    const u = await r.json();
+    document.getElementById('profileMeta').textContent = `Joined: ${u.created_at||'—'}`;
+    document.getElementById('profileLastLogin').textContent = `Last login: ${u.last_login||'—'}`;
+  } catch(_) {}
+}
+
+async function changePassword() {
+  const cur = document.getElementById('curPw').value;
+  const nw  = document.getElementById('newPw').value;
+  const nw2 = document.getElementById('newPw2').value;
+  document.getElementById('pwErr').classList.remove('show');
+  document.getElementById('pwOk').classList.remove('show');
+  if (!cur||!nw||!nw2) { showAuthErr('pwErr','pwErrTxt','Fill in all fields.'); return; }
+  if (nw!==nw2) { showAuthErr('pwErr','pwErrTxt','Passwords do not match.'); return; }
+  try {
+    const r = await fetch(`${API}/auth/change-password`, { method:'POST', headers:jsonHdr(), body:JSON.stringify({current_password:cur,new_password:nw}) });
+    const d = await r.json();
+    if (r.ok) { document.getElementById('pwOk').classList.add('show'); document.getElementById('curPw').value=''; document.getElementById('newPw').value=''; document.getElementById('newPw2').value=''; }
+    else { showAuthErr('pwErr','pwErrTxt', d.detail||'Failed.'); }
+  } catch(_) { showAuthErr('pwErr','pwErrTxt','Server error.'); }
+}
+
+async function loadUserManagement() {
+  if (currentRole !== 'admin') {
+    document.getElementById('userManageTable').innerHTML = '<div style="color:var(--muted);font-size:.82rem;"><i class="fas fa-lock"></i> Admin access required.</div>';
+    return;
+  }
+  try {
+    const r = await fetch(`${API}/auth/users`, { headers:authHdr() });
+    if (!r.ok) return;
+    const users = await r.json();
+    document.getElementById('userManageTable').innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Username</th><th>Role</th><th>Created</th><th>Last Login</th><th>Action</th></tr></thead>
+          <tbody>${users.map(u=>`
+            <tr>
+              <td style="color:var(--muted)">${u.id}</td>
+              <td style="font-weight:600">${escHtml(u.username)}</td>
+              <td><span class="user-role ${u.role}">${u.role}</span></td>
+              <td style="color:var(--muted);font-size:.78rem;">${u.created_at||'—'}</td>
+              <td style="color:var(--muted);font-size:.78rem;">${u.last_login||'Never'}</td>
+              <td>${u.username!==currentUser?`<button onclick="deleteUser('${escHtml(u.username)}')" style="font-size:.7rem;padding:3px 10px;border-radius:6px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red2);cursor:pointer;">Delete</button>`:'—'}</td>
+            </tr>
+          `).join('')}</tbody>
+        </table>
+      </div>
+    `;
+  } catch(_) {}
+}
+
+async function deleteUser(username) {
+  if (!confirm(`Delete user "${username}"?`)) return;
+  try {
+    const r = await fetch(`${API}/auth/users/${username}`, { method:'DELETE', headers:authHdr() });
+    if (r.ok) { toast(`User ${username} deleted`, 'success'); loadUserManagement(); }
+    else { const d=await r.json(); toast(d.detail||'Failed','error'); }
+  } catch(_) { toast('Server error','error'); }
+}
+
+function renderSysInfo(h) {
+  const el = document.getElementById('sysInfoPanel');
+  if (!el) return;
+  const rows = [
+    ['Database', h.database==='ok'?'🟢 Online':'🔴 Offline'],
+    ['MQTT', h.mqtt==='connected'?'🟢 Connected':h.mqtt==='not_configured'?'🟡 Not configured':'🔴 Disconnected'],
+    ['WebSocket clients', h.websocket_clients||0],
+    ['Server time', new Date(h.timestamp).toLocaleString()],
+    ['API version', 'v2.0'],
+    ['Auth', 'SHA-256 + Bearer tokens'],
+  ];
+  el.innerHTML = rows.map(([k,v])=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:.82rem;color:var(--muted)">${k}</span>
+      <span style="font-size:.82rem;font-weight:600;color:var(--text)">${v}</span>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════════
+// SETTINGS UI
+// ════════════════════════════════════════════════════
+function updateRange(rangId, valId, suffix='') {
+  const val = document.getElementById(rangId).value;
+  document.getElementById(valId).textContent = val + suffix;
+  // Update thresholds live
+  if(rangId==='rngTemp')  thresholds.temp = parseFloat(val);
+  if(rangId==='rngHum')   thresholds.humidity = parseFloat(val);
+  if(rangId==='rngBat')   thresholds.battery = parseFloat(val);
+  if(rangId==='rngWt')    thresholds.weight = parseFloat(val);
+  if(rangId==='rngSwarm') thresholds.swarm = parseFloat(val);
+}
+
+// ════════════════════════════════════════════════════
+// FEED TABLE
+// ════════════════════════════════════════════════════
+function updateFeedTable(history) {
+  const tbody = document.getElementById('feedTable');
+  if (!history.length) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--muted)">No data available</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = history.slice(0,20).map(r=>`
+    <tr>
+      <td class="mono" style="color:var(--muted);font-size:.78rem">${new Date(r.timestamp).toLocaleString()}</td>
+      <td style="color:${(r.temperature||0)>thresholds.temp?'var(--red2)':(r.temperature||0)>thresholds.temp-3?'var(--yellow)':'var(--text)'};font-weight:600">${(r.temperature||0).toFixed(1)}°C</td>
+      <td style="color:var(--blue2);font-weight:600">${(r.humidity||0).toFixed(1)}%</td>
+      <td style="color:var(--green2);font-weight:600">${(r.weight||0).toFixed(1)} kg</td>
+      <td>
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="font-weight:600;color:${(r.battery||0)<20?'var(--red2)':(r.battery||0)<50?'var(--yellow)':'var(--purple2)'}">${r.battery||0}%</span>
+          <div style="flex:1;height:4px;background:var(--bg4);border-radius:4px;overflow:hidden;min-width:50px;">
+            <div style="height:100%;width:${r.battery||0}%;background:${(r.battery||0)<20?'var(--red)':(r.battery||0)<50?'var(--yellow)':'var(--purple)'};border-radius:4px;"></div>
+          </div>
+        </div>
+      </td>
+      <td style="color:var(--teal)">${r.sound||0} dB</td>
+      <td>${r.swarm
+        ? '<span style="font-size:.7rem;padding:2px 8px;border-radius:999px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);color:var(--red2);font-weight:700;animation:pulse-badge 1s infinite">⚠ SWARM</span>'
+        : '<span style="font-size:.7rem;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:var(--green2);font-weight:700">✓ Safe</span>'
+      }</td>
+    </tr>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════
+const PAGE_META = {
+  dashboard:{ title:'Dashboard',  sub:'Real-time beehive monitoring' },
+  dbviewer: { title:'DB Viewer',  sub:'Live database table browser' },
+  visitors: { title:'Visitors',   sub:'Connected WebSocket clients' },
+  analytics: { title:'Analytics', sub:'Historical trends & comparison' },
+  map:       { title:'Map View',  sub:'Geographic hive locations' },
+  alerts:    { title:'Alerts',    sub:'Active alerts & notifications' },
+  settings:  { title:'Settings',  sub:'Thresholds & configuration' },
+  profile:   { title:'Profile',   sub:'Account & system info' },
+};
+
+let currentSection = 'dashboard';
+
+function navigate(section) {
+  currentSection = section;
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById(`sec-${section}`)?.classList.add('active');
+  document.querySelector(`.nav-item[onclick="navigate('${section}')"]`)?.classList.add('active');
+  const m = PAGE_META[section]||{};
+  document.getElementById('topbarTitle').textContent = m.title||section;
+  document.getElementById('topbarSub').textContent   = m.sub||'';
+
+  // Lazy load section content
+  if (section==='map') { setTimeout(()=>leafletMap?.invalidateSize(), 100); }
+  if (section==='settings') { loadUserManagement(); loadNotifSettings(); }
+  if (section==='dbviewer')  { connectDbWS(); }
+  if (section==='visitors')  { connectVisitorWS(); }
+  if (section==='profile') { loadProfile(); checkHealth(); }
+  if (section==='analytics') { updateCompare(); }
+
+  // Close sidebar on mobile
+  if (window.innerWidth <= 768) document.getElementById('sidebar').classList.remove('open');
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ════════════════════════════════════════════════════
+// CLOCK
+// ════════════════════════════════════════════════════
+function startClock() {
+  function tick() {
+    const now = new Date();
+    const t = new Date(now.toLocaleString('en-US',{timeZone:'Africa/Algiers'}));
+    const pad = n=>String(n).padStart(2,'0');
+    document.getElementById('clock').textContent = `${pad(t.getHours())}:${pad(t.getMinutes())}:${pad(t.getSeconds())}`;
+  }
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ════════════════════════════════════════════════════
+// TOAST
+// ════════════════════════════════════════════════════
+function toast(msg, type='info') {
+  const c = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  const icons = { success:'fa-circle-check', error:'fa-circle-xmark', warning:'fa-triangle-exclamation', info:'fa-circle-info' };
+  el.innerHTML = `<i class="fas ${icons[type]||icons.info}"></i><span>${escHtml(msg)}</span>`;
+  c.appendChild(el);
+  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(), 350); }, 3500);
+}
+
+// ════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════
+function escHtml(s) {
+  if(typeof s !== 'string') return String(s||'');
+  const d = document.createElement('div'); d.textContent=s; return d.innerHTML;
+}
+
+// ════════════════════════════════════════════════════
+// AVATAR  (localStorage, no endpoint needed)
+// ════════════════════════════════════════════════════
+function _avatarKey() { return `apiary_avatar_${currentUser||'guest'}`; }
+
+function loadAvatar() {
+  const data = localStorage.getItem(_avatarKey());
+  _applyAvatar(data);
+}
+
+function _applyAvatar(dataUrl) {
+  const big   = document.getElementById('profileAvatar');
+  const small = document.getElementById('sidebarAvatar');
+  if (dataUrl) {
+    const imgStyle = `width:100%;height:100%;object-fit:cover;border-radius:50%;`;
+    if (big)   { big.innerHTML   = `<img src="${dataUrl}" style="${imgStyle}">`; big.style.background='none'; }
+    if (small) { small.innerHTML = `<img src="${dataUrl}" style="${imgStyle}">`; small.style.background='none'; }
+  } else {
+    const initials = (currentUser||'?').charAt(0).toUpperCase();
+    if (big)   { big.textContent   = initials; big.style.background=''; }
+    if (small) { small.textContent = initials; small.style.background=''; }
+  }
+}
+
+function handleAvatarUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) { toast('Image too large (max 2 MB)', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl = e.target.result;
+    localStorage.setItem(_avatarKey(), dataUrl);
+    _applyAvatar(dataUrl);
+    toast('Profile photo saved', 'success');
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeAvatar() {
+  localStorage.removeItem(_avatarKey());
+  _applyAvatar(null);
+  toast('Photo removed', 'info');
+}
+
+// ════════════════════════════════════════════════════
+// NOTIFICATIONS  (localStorage config + backend endpoints)
+// ════════════════════════════════════════════════════
+const NOTIF_KEY = () => `apiary_notif_${currentUser||'guest'}`;
+
+function loadNotifSettings() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem(NOTIF_KEY()) || '{}');
+    if (cfg.email)    { document.getElementById('togEmail').checked    = true;  document.getElementById('cfgEmail').value    = cfg.emailAddr||'';   document.getElementById('emailConfig').style.display='block'; }
+    if (cfg.telegram) { document.getElementById('togTg').checked       = true;  document.getElementById('cfgTgChatId').value = cfg.tgChatId||'';   document.getElementById('telegramConfig').style.display='block'; }
+    if (cfg.sms)      { document.getElementById('togSms').checked      = true;  document.getElementById('cfgPhone').value    = cfg.phone||'';       document.getElementById('smsConfig').style.display='block'; }
+    if (cfg.swarm !== undefined) { document.getElementById('rngSwarm').value = cfg.swarm; document.getElementById('valSwarm').textContent = cfg.swarm; thresholds.swarm = cfg.swarm; }
+  } catch(_) {}
+}
+
+function toggleNotifConfig(channel, enabled) {
+  const map = { email:'emailConfig', telegram:'telegramConfig', sms:'smsConfig' };
+  const el = document.getElementById(map[channel]);
+  if (el) el.style.display = enabled ? 'block' : 'none';
+  if (!enabled) _persistNotif(channel, false);
+}
+
+function saveNotifConfig(channel) {
+  const cfg = JSON.parse(localStorage.getItem(NOTIF_KEY()) || '{}');
+  if (channel === 'email') {
+    const addr = document.getElementById('cfgEmail').value.trim();
+    if (!addr) { toast('Enter a valid email', 'error'); return; }
+    cfg.email = true; cfg.emailAddr = addr;
+    _sendNotifConfig({ channel:'email', enabled:true, address:addr });
+    _flash('emailSaveOk');
+  } else if (channel === 'telegram') {
+    const chatId = document.getElementById('cfgTgChatId').value.trim();
+    if (!chatId) { toast('Enter your Telegram Chat ID', 'error'); return; }
+    cfg.telegram = true; cfg.tgChatId = chatId;
+    _sendNotifConfig({ channel:'telegram', enabled:true, chat_id:chatId });
+    _flash('telegramSaveOk');
+  } else if (channel === 'sms') {
+    const phone = document.getElementById('cfgPhone').value.trim();
+    if (!phone) { toast('Enter a phone number', 'error'); return; }
+    cfg.sms = true; cfg.phone = phone;
+    _sendNotifConfig({ channel:'sms', enabled:true, phone:phone });
+    _flash('smsSaveOk');
+  }
+  localStorage.setItem(NOTIF_KEY(), JSON.stringify(cfg));
+  toast('Notification settings saved', 'success');
+}
+
+function _persistNotif(channel, enabled) {
+  const cfg = JSON.parse(localStorage.getItem(NOTIF_KEY()) || '{}');
+  cfg[channel] = enabled;
+  localStorage.setItem(NOTIF_KEY(), JSON.stringify(cfg));
+  _sendNotifConfig({ channel, enabled });
+}
+
+async function _sendNotifConfig(payload) {
+  try {
+    await fetch(`${API}/api/notifications/config`, {
+      method: 'POST',
+      headers: jsonHdr(),
+      body: JSON.stringify(payload)
+    });
+  } catch(_) {}   // silently ignore if endpoint not yet deployed
+}
+
+function _flash(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display = 'inline';
+  setTimeout(() => el.style.display = 'none', 2500);
+}
+
+// ════════════════════════════════════════════════════
+// DB VIEWER  WEBSOCKET
+// ════════════════════════════════════════════════════
+let dbWS = null, dbWsReady = false;
+
+function connectDbWS() {
+  if (dbWS && (dbWS.readyState === 0 || dbWS.readyState === 1)) return;
+  const url = API.replace(/^http/, 'ws') + '/ws/db?token=' + authToken;
+  dbWS = new WebSocket(url);
+
+  dbWS.onopen = () => {
+    dbWsReady = true;
+    toast('DB viewer connected', 'info');
+  };
+
+  dbWS.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'db_snapshot') renderDbSnapshot(msg.data, msg.timestamp);
+    } catch(_) {}
+  };
+
+  dbWS.onclose = () => {
+    dbWsReady = false;
+    document.getElementById('dbViewerContent').innerHTML =
+      '<div style="text-align:center;padding:40px;color:var(--muted);"><i class="fas fa-plug-circle-xmark" style="font-size:1.5rem;display:block;margin-bottom:10px;opacity:.4"></i>WebSocket disconnected — navigate back to DB Viewer to reconnect.</div>';
+  };
+  dbWS.onerror = () => { dbWsReady = false; };
+}
+
+function dbRefreshNow() {
+  if (dbWS && dbWS.readyState === 1) { dbWS.send('refresh'); }
+  else { connectDbWS(); }
+}
+
+function renderDbSnapshot(data, timestamp) {
+  const el = document.getElementById('dbViewerContent');
+  if (!el) return;
+  const ts = new Date(timestamp).toLocaleTimeString();
+  let html = `<div style="font-size:.72rem;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:6px;"><span class="live-dot"></span> Last snapshot: ${ts}</div>`;
+
+  for (const [tableName, tableData] of Object.entries(data)) {
+    const { columns, rows } = tableData;
+    const count = rows.length;
+    html += `
+      <div style="margin-bottom:28px;">
+        <div class="db-table-label">
+          <i class="fas fa-table"></i> ${escHtml(tableName)}
+          <span style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:var(--amber);border-radius:999px;font-size:.65rem;padding:1px 8px;font-weight:700;">${count} row${count!==1?'s':''}</span>
+          <span class="live-dot"></span>
+        </div>
+        <div class="db-table-wrap card" style="padding:0;overflow:hidden;">
+          <table class="db-tbl">
+            <thead><tr>${columns.map(c=>`<th>${escHtml(String(c))}</th>`).join('')}</tr></thead>
+            <tbody>
+    `;
+    if (!rows.length) {
+      html += `<tr><td colspan="${columns.length}" style="text-align:center;padding:20px;color:var(--muted2);">— empty table —</td></tr>`;
+    } else {
+      rows.forEach(row => {
+        html += '<tr>' + row.map(cell => {
+          const v = cell === null || cell === undefined ? '<span style="color:var(--muted2)">null</span>' : escHtml(String(cell));
+          return `<td>${v}</td>`;
+        }).join('') + '</tr>';
+      });
+    }
+    html += `</tbody></table></div></div>`;
+  }
+  el.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════
+// VISITORS  WEBSOCKET
+// ════════════════════════════════════════════════════
+let visitorWS = null;
+let visitorPeak = 0;
+
+function connectVisitorWS() {
+  if (visitorWS && (visitorWS.readyState === 0 || visitorWS.readyState === 1)) return;
+  const url = API.replace(/^http/, 'ws') + '/ws/visitors?token=' + authToken;
+  visitorWS = new WebSocket(url);
+
+  visitorWS.onopen = () => toast('Visitor tracker connected', 'info');
+
+  visitorWS.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'visitors_update') renderVisitors(msg);
+    } catch(_) {}
+  };
+
+  visitorWS.onclose = () => {
+    document.getElementById('visitorList').innerHTML =
+      '<div style="text-align:center;padding:40px;color:var(--muted);"><i class="fas fa-plug-circle-xmark" style="font-size:1.5rem;display:block;margin-bottom:10px;opacity:.4"></i>WebSocket disconnected — navigate back to Visitors to reconnect.</div>';
+  };
+}
+
+function renderVisitors(msg) {
+  const count = msg.count || 0;
+  if (count > visitorPeak) visitorPeak = count;
+
+  document.getElementById('visitorTotal').textContent = count;
+  document.getElementById('visitorPeak').textContent  = visitorPeak;
+  document.getElementById('visitorLastSeen').textContent =
+    new Date(msg.timestamp).toLocaleTimeString();
+
+  // Update badge in sidebar
+  const badge = document.getElementById('visitorBadge');
+  if (badge) {
+    badge.textContent = count;
+    badge.style.display = count > 0 ? 'inline-block' : 'none';
+  }
+  // Update status bar count
+  const ccount = document.getElementById('wsCcount');
+  if (ccount) ccount.textContent = count;
+
+  const el = document.getElementById('visitorList');
+  if (!el) return;
+  if (!msg.clients || !msg.clients.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);"><i class="fas fa-ghost" style="font-size:2rem;display:block;margin-bottom:12px;opacity:.3"></i>No clients currently connected.</div>';
+    return;
+  }
+  el.innerHTML = msg.clients.map((c, i) => {
+    const initials = (c.username || '?').charAt(0).toUpperCase();
+    const colors = ['var(--blue)','var(--purple)','var(--green)','var(--amber)','var(--teal)'];
+    const color  = colors[i % colors.length];
+    return `
+      <div class="visitor-card">
+        <div class="visitor-avatar" style="background:linear-gradient(135deg,${color},${color}aa);">${escHtml(initials)}</div>
+        <div class="visitor-info">
+          <div class="visitor-name">${escHtml(c.username || 'Anonymous')}</div>
+          <div class="visitor-meta"><i class="fas fa-circle" style="font-size:.45rem;color:var(--green);vertical-align:middle"></i> Connected · ${c.connected_at ? new Date(c.connected_at).toLocaleTimeString() : '—'}</div>
+        </div>
+        <span style="font-size:.68rem;padding:3px 10px;border-radius:999px;background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--green2);font-weight:600;">Online</span>
+      </div>
+    `;
+  }).join('');
+}
+</script>
+</body>
+</html>
